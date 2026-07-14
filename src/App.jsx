@@ -10,6 +10,7 @@ import ProductDetails from './pages/ProductDetails';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
+import SystemHealth from './pages/SystemHealth';
 
 const App = () => {
   return (
@@ -32,6 +33,7 @@ const App = () => {
 
             <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
               <Route path="/users" element={<UserManagement />} />
+              <Route path="/system-health" element={<SystemHealth />} />
             </Route>
           </Route>
         </Routes>

@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell } from 'lucide-react';
+import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell, Server } from 'lucide-react';
 import apiClient from '../api/client';
 import './Layout.css';
 
@@ -77,6 +77,13 @@ const Layout = () => {
             <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Users size={20} />
               <span>Users</span>
+            </NavLink>
+          )}
+
+          {user?.role === 'Admin' && (
+            <NavLink to="/system-health" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Server size={20} />
+              <span>System Health</span>
             </NavLink>
           )}
 

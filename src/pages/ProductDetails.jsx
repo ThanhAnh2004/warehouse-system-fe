@@ -11,6 +11,8 @@ const ProductDetails = () => {
   const { user } = useContext(AuthContext);
   const [product, setProduct] = useState(null);
   const [stock, setStock] = useState(0);
+  const [stockByLocation, setStockByLocation] = useState([]);
+  const [reorderInfo, setReorderInfo] = useState(null);
   const [forecast, setForecast] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,9 +26,19 @@ const ProductDetails = () => {
         setProduct(prodData);
 
         if (prodData && prodData.id) {
-          // 2. Fetch Stock
+          // 2. Fetch Stock (returns one Inventory record per location)
           const stockRes = await apiClient.get(`/inventory/stock/${prodData.id}`);
-          setStock(stockRes.data.stock);
+          const records = Array.isArray(stockRes.data) ? stockRes.data : [];
+          setStockByLocation(records);
+          setStock(records.reduce((sum, r) => sum + (r.currentQuantity || 0), 0));
+
+          // 2b. Fetch EOQ-based reorder point
+          try {
+            const reorderRes = await apiClient.get(`/inventory/reorder/${prodData.id}`);
+            setReorderInfo(reorderRes.data);
+          } catch (e) {
+            console.warn('Reorder info not available.');
+          }
 
           // 3. Fetch Forecast only if not Staff
           if (user?.role !== 'Staff') {
@@ -84,8 +96,26 @@ const ProductDetails = () => {
             
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Current Stock</span>
-              <strong style={{ fontSize: '1.2rem', color: stock < 10 ? 'var(--danger)' : 'var(--success)' }}>{stock}</strong>
+              <strong style={{ fontSize: '1.2rem', color: reorderInfo?.lowStock ? 'var(--danger)' : 'var(--success)' }}>{stock}</strong>
             </div>
+
+            {reorderInfo && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginTop: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }} title="Economic Order Quantity - reorder when stock falls below this">Reorder Point (EOQ)</span>
+                <strong style={{ fontSize: '1.2rem' }}>{reorderInfo.eoq}</strong>
+              </div>
+            )}
+
+            {stockByLocation.length > 1 && (
+              <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {stockByLocation.map(r => (
+                  <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    <span>{r.location}</span>
+                    <span>{r.currentQuantity}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

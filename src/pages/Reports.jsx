@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, FileText, Database, Package, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Download, FileText, Database, Package, ArrowUpRight, ArrowDownRight, AlertTriangle, TrendingUp } from 'lucide-react';
 import apiClient from '../api/client';
 import * as XLSX from 'xlsx';
 import {
@@ -12,6 +12,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend as RechartsLegend, ResponsiveContainer } from 'recharts';
 
 ChartJS.register(
   CategoryScale,
@@ -24,6 +25,7 @@ ChartJS.register(
 
 const Reports = () => {
   const [reportData, setReportData] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,8 +34,12 @@ const Reports = () => {
 
   const fetchReport = async () => {
     try {
-      const response = await apiClient.get('/reports/summary');
-      setReportData(response.data);
+      const [summaryRes, analyticsRes] = await Promise.all([
+        apiClient.get('/reports/summary'),
+        apiClient.get('/reports/analytics'),
+      ]);
+      setReportData(summaryRes.data);
+      setAnalytics(analyticsRes.data);
     } catch (error) {
       console.error('Failed to fetch report:', error);
     } finally {
@@ -166,8 +172,81 @@ const Reports = () => {
           </div>
 
           {/* Biểu đồ Chart.js */}
-          <div className="glass-card" style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <div className="glass-card" style={{ maxWidth: '800px', margin: '0 auto', marginBottom: '2rem' }}>
             {chartData && <Bar options={chartOptions} data={chartData} />}
+          </div>
+
+          {/* Aggregate Demand Forecast */}
+          <div className="glass-card" style={{ marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+              <TrendingUp size={22} color="var(--accent-primary)" />
+              <h3 className="text-title" style={{ fontSize: '1.25rem' }}>Demand Forecast Trend (Next 7 Days, All Products)</h3>
+            </div>
+
+            {analytics?.forecastAvailable && analytics.demandForecast.length > 0 ? (
+              <div style={{ width: '100%', height: '320px' }}>
+                <ResponsiveContainer>
+                  <LineChart data={analytics.demandForecast} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                    <XAxis dataKey="date" stroke="var(--text-secondary)" />
+                    <YAxis stroke="var(--text-secondary)" />
+                    <RechartsTooltip
+                      contentStyle={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                    />
+                    <RechartsLegend />
+                    <Line type="monotone" dataKey="predictedQuantity" stroke="var(--accent-primary)" strokeWidth={3} activeDot={{ r: 8 }} name="Total Predicted Demand" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-primary)', borderRadius: '8px' }}>
+                Forecasting service unavailable or not enough transaction history yet to build a demand forecast.
+              </div>
+            )}
+          </div>
+
+          {/* Inventory Status */}
+          <div className="glass-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertTriangle size={22} color="var(--warning)" />
+                <h3 className="text-title" style={{ fontSize: '1.25rem' }}>Inventory Status</h3>
+              </div>
+              {analytics && (
+                <span className="badge badge-danger">{analytics.lowStockCount} low stock</span>
+              )}
+            </div>
+
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>Current Stock</th>
+                    <th title="Economic Order Quantity - reorder threshold">EOQ</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics?.inventoryStatus?.length ? analytics.inventoryStatus.map(item => (
+                    <tr key={item.productId}>
+                      <td><strong>{item.sku}</strong></td>
+                      <td>{item.name}</td>
+                      <td style={{ fontWeight: 700 }}>{item.currentStock}</td>
+                      <td>{item.eoq ?? 'N/A'}</td>
+                      <td>
+                        <span className={`badge ${item.lowStock ? 'badge-danger' : 'badge-success'}`}>
+                          {item.lowStock ? 'Low Stock' : 'Healthy'}
+                        </span>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>No products found</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
