@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import apiClient from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-import { Plus, Users, Search } from 'lucide-react';
+import { Plus, Users, Search, Edit, Trash2 } from 'lucide-react';
 
 const UserManagement = () => {
   const { user } = useContext(AuthContext);
@@ -9,6 +9,8 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingUserId, setEditingUserId] = useState(null);
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -22,7 +24,6 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      // Giả sử API Gateway map /users to identity-service findAll
       const res = await apiClient.get('/users');
       setUsers(res.data);
     } catch (err) {
@@ -36,17 +37,64 @@ const UserManagement = () => {
     fetchUsers();
   }, []);
 
-  const handleCreateUser = async (e) => {
+  const openAddModal = () => {
+    setIsEditMode(false);
+    setEditingUserId(null);
+    setNewUser({
+      email: '', password: '', fullname: '', role: 'Staff', address: '', phone: '', gender: 'Male'
+    });
+    setShowModal(true);
+  };
+
+  const openEditModal = (u) => {
+    setIsEditMode(true);
+    setEditingUserId(u._id);
+    setNewUser({
+      email: u.email,
+      password: '',
+      fullname: u.fullname,
+      role: u.role,
+      address: u.address || '',
+      phone: u.phone || '',
+      gender: u.gender || 'Male'
+    });
+    setShowModal(true);
+  };
+
+  const handleDeleteUser = async (id) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      try {
+        await apiClient.delete(`/users/${id}`);
+        fetchUsers();
+      } catch (err) {
+        alert('Error deleting user: ' + (err.response?.data?.message || err.message));
+      }
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await apiClient.post('/auth/register', newUser);
+      if (isEditMode) {
+        // Send only fields allowed by UpdateUserDto
+        const payload = {
+          fullname: newUser.fullname,
+          role: newUser.role,
+          address: newUser.address,
+          phone: newUser.phone,
+          gender: newUser.gender
+        };
+        await apiClient.patch(`/users/${editingUserId}`, payload);
+      } else {
+        await apiClient.post('/auth/register', newUser);
+      }
       setShowModal(false);
       setNewUser({
         email: '', password: '', fullname: '', role: 'Staff', address: '', phone: '', gender: 'Male'
       });
       fetchUsers();
     } catch (err) {
-      alert('Error creating user: ' + (err.response?.data?.message || err.message));
+      alert(`Error ${isEditMode ? 'updating' : 'creating'} user: ` + (err.response?.data?.message || err.message));
     }
   };
 
@@ -59,7 +107,7 @@ const UserManagement = () => {
     <div className="animate-slide-up">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
         <h2 className="text-title">User Management</h2>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary" onClick={openAddModal}>
           <Plus size={18} /> Add User
         </button>
       </div>
@@ -86,11 +134,13 @@ const UserManagement = () => {
                 <th>Role</th>
                 <th>Phone</th>
                 <th>Gender</th>
+                <th>Address</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="5" style={{ padding: '2rem', textAlign: 'center' }}>Loading users...</td></tr>
+                <tr><td colSpan="7" style={{ padding: '2rem', textAlign: 'center' }}>Loading users...</td></tr>
               ) : filteredUsers.map(u => (
                 <tr key={u._id}>
                   <td><strong>{u.email}</strong></td>
@@ -102,6 +152,27 @@ const UserManagement = () => {
                   </td>
                   <td>{u.phone || 'N/A'}</td>
                   <td>{u.gender || 'N/A'}</td>
+                  <td>{u.address || 'N/A'}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button 
+                        className="btn btn-outline" 
+                        style={{ padding: '0.25rem 0.5rem', background: 'transparent' }}
+                        onClick={() => openEditModal(u)}
+                        title="Edit User"
+                      >
+                        <Edit size={14} />
+                      </button>
+                      <button 
+                        className="btn btn-outline" 
+                        style={{ padding: '0.25rem 0.5rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
+                        onClick={() => handleDeleteUser(u._id)}
+                        title="Delete User"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -109,20 +180,22 @@ const UserManagement = () => {
         </div>
       </div>
 
-      {/* Add User Modal */}
+      {/* User Modal */}
       {showModal && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 className="text-title" style={{ fontSize: '1.5rem' }}>Add New User</h3>
-            <form onSubmit={handleCreateUser} style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 className="text-title" style={{ fontSize: '1.5rem' }}>{isEditMode ? 'Edit User' : 'Add New User'}</h3>
+            <form onSubmit={handleSubmit} style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="form-group mb-4">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Email</label>
-                <input required type="email" className="form-input" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
+                <input required type="email" disabled={isEditMode} className="form-input" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
               </div>
-              <div className="form-group mb-4">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Password</label>
-                <input required type="password" className="form-input" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
-              </div>
+              {!isEditMode && (
+                <div className="form-group mb-4">
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Password</label>
+                  <input required type="password" className="form-input" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
+                </div>
+              )}
               <div className="form-group mb-4">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Full Name</label>
                 <input required type="text" className="form-input" value={newUser.fullname} onChange={e => setNewUser({...newUser, fullname: e.target.value})} />
@@ -138,20 +211,32 @@ const UserManagement = () => {
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <div className="form-group mb-4" style={{ flex: 1 }}>
                   <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Phone</label>
-                  <input type="text" className="form-input" value={newUser.phone} onChange={e => setNewUser({...newUser, phone: e.target.value})} />
+                  <input 
+                    required 
+                    type="text" 
+                    pattern="[0-9]{10,11}" 
+                    title="Phone number must be between 10 and 11 digits"
+                    className="form-input" 
+                    value={newUser.phone} 
+                    onChange={e => setNewUser({...newUser, phone: e.target.value})} 
+                  />
                 </div>
                 <div className="form-group mb-4" style={{ flex: 1 }}>
                   <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Gender</label>
-                  <select className="form-input" value={newUser.gender} onChange={e => setNewUser({...newUser, gender: e.target.value})}>
+                  <select required className="form-input" value={newUser.gender} onChange={e => setNewUser({...newUser, gender: e.target.value})}>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                   </select>
                 </div>
               </div>
+              <div className="form-group mb-4">
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Address</label>
+                <input required type="text" className="form-input" value={newUser.address} onChange={e => setNewUser({...newUser, address: e.target.value})} />
+              </div>
               
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Create User</button>
+                <button type="submit" className="btn btn-primary">{isEditMode ? 'Save Changes' : 'Create User'}</button>
               </div>
             </form>
           </div>

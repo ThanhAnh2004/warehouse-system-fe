@@ -13,41 +13,98 @@ const ProductDetails = () => {
   const [stock, setStock] = useState(0);
   const [forecast, setForecast] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', price: '', description: '', image: null });
 
-  useEffect(() => {
-    const fetchDetails = async () => {
-      try {
-        setLoading(true);
-        // 1. Fetch Product by SKU
-        const prodRes = await apiClient.get(`/inventory/products/${sku}`);
-        const prodData = prodRes.data;
-        setProduct(prodData);
+  const fetchDetails = async () => {
+    try {
+      setLoading(true);
+      // 1. Fetch Product by SKU
+      const prodRes = await apiClient.get(`/inventory/products/${sku}`);
+      const prodData = prodRes.data;
+      setProduct(prodData);
 
-        if (prodData && prodData.id) {
-          // 2. Fetch Stock
-          const stockRes = await apiClient.get(`/inventory/stock/${prodData.id}`);
-          setStock(stockRes.data.stock);
+      if (prodData && prodData.id) {
+        // 2. Fetch Stock
+        const stockRes = await apiClient.get(`/inventory/stock/${prodData.id}`);
+        const totalStock = Array.isArray(stockRes.data) 
+          ? stockRes.data.reduce((sum, item) => sum + (item.currentQuantity || 0), 0) 
+          : 0;
+        setStock(totalStock);
 
-          // 3. Fetch Forecast only if not Staff
-          if (user?.role !== 'Staff') {
-            try {
-              const forecastRes = await apiClient.get(`/inventory/forecast/${prodData.id}`);
-              if (forecastRes.data && forecastRes.data.forecast) {
-                setForecast(forecastRes.data.forecast);
-              }
-            } catch (e) {
-              console.warn("Forecast not available yet or not enough data.");
+        // 3. Fetch Forecast only if not Staff
+        if (user?.role !== 'Staff') {
+          try {
+            const forecastRes = await apiClient.get(`/inventory/forecast/${prodData.id}`);
+            if (forecastRes.data && forecastRes.data.forecast) {
+              setForecast(forecastRes.data.forecast);
             }
+          } catch (e) {
+            console.warn("Forecast not available yet or not enough data.");
           }
         }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDetails();
   }, [sku, user]);
+
+  const startEditing = () => {
+    setEditForm({ 
+      name: product.name, 
+      price: Number(product.price), 
+      description: product.description || '', 
+      quantity: stock,
+      image: null 
+    });
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editForm.image) {
+        const formData = new FormData();
+        formData.append('name', editForm.name);
+        formData.append('price', editForm.price);
+        formData.append('description', editForm.description);
+        formData.append('quantity', editForm.quantity);
+        formData.append('image', editForm.image);
+
+        await apiClient.patch(`/inventory/products/${sku}`, formData);
+      } else {
+        await apiClient.patch(`/inventory/products/${sku}`, {
+          name: editForm.name,
+          price: Number(editForm.price),
+          description: editForm.description,
+          quantity: Number(editForm.quantity)
+        });
+      }
+      fetchDetails();
+      setIsEditing(false);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to update product');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      try {
+        await apiClient.delete(`/inventory/products/${sku}`);
+        navigate('/inventory');
+      } catch (e) {
+        console.error(e);
+        alert('Failed to delete product');
+      }
+    }
+  };
 
   if (loading) return <div className="page-container animate-fade-in">Loading product details...</div>;
   if (!product) return <div className="page-container animate-fade-in">Product not found.</div>;
@@ -74,18 +131,105 @@ const ProductDetails = () => {
             )}
           </div>
           <div>
-            <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{product.name}</h3>
-            <div style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>SKU: {product.sku}</div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '0.5rem' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Price</span>
-              <strong style={{ fontSize: '1.1rem', color: 'var(--accent-primary)' }}>{product.price?.toLocaleString()} VND</strong>
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Current Stock</span>
-              <strong style={{ fontSize: '1.2rem', color: stock < 10 ? 'var(--danger)' : 'var(--success)' }}>{stock}</strong>
-            </div>
+            {isEditing ? (
+              <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                 <div className="form-group">
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Product Name</label>
+                  <input 
+                    required 
+                    type="text" 
+                    className="form-input" 
+                    value={editForm.name} 
+                    onChange={e => setEditForm({ ...editForm, name: e.target.value })} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Price</label>
+                  <input 
+                    required 
+                    type="number" 
+                    className="form-input" 
+                    value={editForm.price} 
+                    onChange={e => setEditForm({ ...editForm, price: e.target.value })} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Description</label>
+                  <textarea 
+                    className="form-input" 
+                    rows="3" 
+                    style={{ resize: 'none' }}
+                    value={editForm.description} 
+                    onChange={e => setEditForm({ ...editForm, description: e.target.value })} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Stock Quantity</label>
+                  <input 
+                    required 
+                    type="number" 
+                    min="0"
+                    className="form-input" 
+                    value={editForm.quantity} 
+                    onChange={e => setEditForm({ ...editForm, quantity: e.target.value })} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Product Image</label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    className="form-input" 
+                    onChange={e => setEditForm({ ...editForm, image: e.target.files[0] })} 
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setIsEditing(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save</button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{product.name}</h3>
+                <div style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>SKU: {product.sku}</div>
+
+                {product.description && (
+                  <div style={{ marginBottom: '1.5rem', fontSize: '0.95rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    <strong>Description:</strong><br />
+                    {product.description}
+                  </div>
+                )}
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '0.5rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Price</span>
+                  <strong style={{ fontSize: '1.1rem', color: 'var(--accent-primary)' }}>{Number(product.price).toLocaleString()} VND</strong>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '1rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Current Stock</span>
+                  <strong style={{ fontSize: '1.2rem', color: stock < 20 ? 'var(--danger)' : 'var(--success)' }}>{stock}</strong>
+                </div>
+
+                {user?.role !== 'Staff' && (
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                    <button 
+                      className="btn" 
+                      onClick={startEditing} 
+                      style={{ flex: 1, backgroundColor: '#2563eb', color: '#ffffff', border: 'none', fontWeight: 600 }}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      className="btn" 
+                      onClick={handleDelete} 
+                      style={{ flex: 1, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 

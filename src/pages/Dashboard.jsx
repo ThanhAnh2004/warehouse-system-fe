@@ -12,7 +12,7 @@ const Dashboard = () => {
         const response = await apiClient.get('/reports/summary');
         setData({
           totalProducts: response.data.totalProducts,
-          lowStock: 0, // Placeholder as report service doesn't return this yet
+          lowStock: response.data.lowStock || 0,
           transactionsToday: response.data.totalImports + response.data.totalExports
         });
       } catch (error) {

@@ -10,6 +10,7 @@ import ProductDetails from './pages/ProductDetails';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
+import Profile from './pages/Profile';
 
 const App = () => {
   return (
@@ -28,6 +29,7 @@ const App = () => {
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/inventory/:sku" element={<ProductDetails />} />
               <Route path="/transactions" element={<Transactions />} />
+              <Route path="/profile" element={<Profile />} />
             </Route>
 
             <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
