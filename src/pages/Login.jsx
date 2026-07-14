@@ -67,7 +67,7 @@ const Login = () => {
 
           {error && <div className="login-error">{error}</div>}
 
-          <form onSubmit={handleSubmit} className="login-form">
+          <form onSubmit={handleSubmit} className="login-form" autoComplete="off">
             <div className="form-group">
               <label className="form-label">Email</label>
               <div className="input-with-icon">
@@ -79,6 +79,7 @@ const Login = () => {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                   placeholder="Enter your email"
+                  autoComplete="off"
                 />
               </div>
             </div>
@@ -94,6 +95,7 @@ const Login = () => {
                   required
                   minLength={6}
                   placeholder="Enter your password"
+                  autoComplete="new-password"
                 />
                 <button 
                   type="button" 
@@ -111,15 +113,6 @@ const Login = () => {
               {!loading && <ArrowRight size={18} />}
             </button>
           </form>
-          
-          <div className="login-footer">
-            <p>Demo Credentials:</p>
-            <div className="demo-creds">
-              <span><b>Admin:</b> admin@gmail.com / 123456</span>
-              <span><b>Manager:</b> manager@gmail.com / 123456</span>
-              <span><b>Staff:</b> staff@gmail.com / 123456</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
