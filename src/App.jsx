@@ -11,6 +11,7 @@ import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
 import Profile from './pages/Profile';
+import RoleManagement from './pages/RoleManagement';
 
 const App = () => {
   return (
@@ -34,6 +35,7 @@ const App = () => {
 
             <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
               <Route path="/users" element={<UserManagement />} />
+              <Route path="/role-management" element={<RoleManagement />} />
             </Route>
           </Route>
         </Routes>

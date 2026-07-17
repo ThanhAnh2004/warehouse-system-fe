@@ -16,7 +16,16 @@ const Inventory = () => {
   
   // Modal state
   const [showModal, setShowModal] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', quantity: 0, description: '', image: null });
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    sku: '',
+    price: '',
+    quantity: 0,
+    description: '',
+    minStockLevel: 20,
+    maxStockLevel: '',
+    image: null
+  });
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -59,6 +68,10 @@ const Inventory = () => {
     formData.append('price', newProduct.price);
     formData.append('quantity', newProduct.quantity);
     formData.append('description', newProduct.description);
+    
+    if (newProduct.minStockLevel) formData.append('minStockLevel', Number(newProduct.minStockLevel));
+    if (newProduct.maxStockLevel) formData.append('maxStockLevel', Number(newProduct.maxStockLevel));
+
     if (newProduct.image) {
       formData.append('image', newProduct.image);
     }
@@ -68,7 +81,7 @@ const Inventory = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setShowModal(false);
-      setNewProduct({ name: '', sku: '', price: '', quantity: 0, description: '', image: null });
+      setNewProduct({ name: '', sku: '', price: '', quantity: 0, description: '', minStockLevel: 20, maxStockLevel: '', image: null });
       fetchProducts(); // refresh
     } catch (err) {
       console.error(err);
@@ -136,10 +149,10 @@ const Inventory = () => {
                   <td style={{ fontWeight: 600 }}>{p.name}</td>
                   <td style={{ fontWeight: 700 }}><span className="text-gradient">{Number(p.price).toLocaleString()} VND</span></td>
                   <td>
-                    <span style={{ fontWeight: 700, color: (p.quantity ?? 0) < 20 ? 'var(--danger)' : 'var(--text-primary)' }}>
+                    <span style={{ fontWeight: 700, color: (p.quantity ?? 0) < (p.minStockLevel || 20) ? 'var(--danger)' : 'var(--text-primary)' }}>
                       {p.quantity ?? 0}
                     </span>
-                    {(p.quantity ?? 0) < 20 && (
+                    {(p.quantity ?? 0) < (p.minStockLevel || 20) && (
                       <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', backgroundColor: 'var(--danger-light)', color: 'var(--danger)', fontWeight: 600 }}>
                         Low Stock
                       </span>
@@ -188,7 +201,7 @@ const Inventory = () => {
       {/* Add Product Modal */}
       {showModal && (
         <div className="modal-backdrop">
-          <div className="modal-content glass-card animate-slide-up">
+          <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>Add New Product</h3>
             <form onSubmit={handleAddProduct} style={{ marginTop: '1.5rem' }}>
               <div className="form-group mb-4">
@@ -207,6 +220,19 @@ const Inventory = () => {
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Initial Stock</label>
                 <input required type="number" className="form-input" value={newProduct.quantity} onChange={e => setNewProduct({...newProduct, quantity: e.target.value})} />
               </div>
+
+              
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div className="form-group mb-4" style={{ flex: 1 }}>
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Min Stock Alert</label>
+                  <input type="number" className="form-input" value={newProduct.minStockLevel} onChange={e => setNewProduct({...newProduct, minStockLevel: e.target.value})} />
+                </div>
+                <div className="form-group mb-4" style={{ flex: 1 }}>
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Max Stock Level</label>
+                  <input type="number" className="form-input" value={newProduct.maxStockLevel} onChange={e => setNewProduct({...newProduct, maxStockLevel: e.target.value})} />
+                </div>
+              </div>
+
               <div className="form-group mb-4">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Description</label>
                 <textarea className="form-input" rows="3" style={{ resize: 'none' }} value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
