@@ -11,7 +11,13 @@ export const AuthProvider = ({ children }) => {
   const performLoginState = (token, refreshToken) => {
     // Decode JWT token to get user info
     const payload = JSON.parse(atob(token.split('.')[1]));
-    const userData = { email: payload.email, id: payload.sub, role: payload.role, fullname: payload.fullname };
+    const userData = { 
+      email: payload.email, 
+      id: payload.sub, 
+      role: payload.role, 
+      permissions: payload.permissions || [],
+      fullname: payload.fullname 
+    };
     
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));

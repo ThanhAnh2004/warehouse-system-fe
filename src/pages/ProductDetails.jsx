@@ -14,7 +14,15 @@ const ProductDetails = () => {
   const [forecast, setForecast] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', price: '', description: '', image: null });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    price: '',
+    description: '',
+    quantity: 0,
+    minStockLevel: 20,
+    maxStockLevel: '',
+    image: null
+  });
 
   const fetchDetails = async () => {
     try {
@@ -61,6 +69,8 @@ const ProductDetails = () => {
       price: Number(product.price), 
       description: product.description || '', 
       quantity: stock,
+      minStockLevel: product.minStockLevel || 20,
+      maxStockLevel: product.maxStockLevel || '',
       image: null 
     });
     setIsEditing(true);
@@ -69,22 +79,29 @@ const ProductDetails = () => {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        name: editForm.name,
+        price: Number(editForm.price),
+        description: editForm.description,
+        quantity: Number(editForm.quantity),
+        minStockLevel: Number(editForm.minStockLevel),
+        maxStockLevel: editForm.maxStockLevel ? Number(editForm.maxStockLevel) : null
+      };
+
       if (editForm.image) {
         const formData = new FormData();
-        formData.append('name', editForm.name);
-        formData.append('price', editForm.price);
-        formData.append('description', editForm.description);
-        formData.append('quantity', editForm.quantity);
+        Object.keys(payload).forEach(key => {
+          if (payload[key] !== null && payload[key] !== undefined) {
+            formData.append(key, payload[key]);
+          }
+        });
         formData.append('image', editForm.image);
 
-        await apiClient.patch(`/inventory/products/${sku}`, formData);
-      } else {
-        await apiClient.patch(`/inventory/products/${sku}`, {
-          name: editForm.name,
-          price: Number(editForm.price),
-          description: editForm.description,
-          quantity: Number(editForm.quantity)
+        await apiClient.patch(`/inventory/products/${sku}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
         });
+      } else {
+        await apiClient.patch(`/inventory/products/${sku}`, payload);
       }
       fetchDetails();
       setIsEditing(false);
@@ -174,6 +191,29 @@ const ProductDetails = () => {
                     onChange={e => setEditForm({ ...editForm, quantity: e.target.value })} 
                   />
                 </div>
+
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Min Stock Alert</label>
+                    <input 
+                      type="number" 
+                      className="form-input" 
+                      value={editForm.minStockLevel} 
+                      onChange={e => setEditForm({ ...editForm, minStockLevel: e.target.value })} 
+                    />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Max Stock Level</label>
+                    <input 
+                      type="number" 
+                      className="form-input" 
+                      value={editForm.maxStockLevel} 
+                      onChange={e => setEditForm({ ...editForm, maxStockLevel: e.target.value })} 
+                    />
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Product Image</label>
                   <input 
@@ -192,7 +232,7 @@ const ProductDetails = () => {
               <>
                 <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{product.name}</h3>
                 <div style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>SKU: {product.sku}</div>
-
+ 
                 {product.description && (
                   <div style={{ marginBottom: '1.5rem', fontSize: '0.95rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
                     <strong>Description:</strong><br />
@@ -205,9 +245,20 @@ const ProductDetails = () => {
                   <strong style={{ fontSize: '1.1rem', color: 'var(--accent-primary)' }}>{Number(product.price).toLocaleString()} VND</strong>
                 </div>
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '0.5rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Current Stock</span>
-                  <strong style={{ fontSize: '1.2rem', color: stock < 20 ? 'var(--danger)' : 'var(--success)' }}>{stock}</strong>
+                  <strong style={{ fontSize: '1.2rem', color: stock < (product.minStockLevel || 20) ? 'var(--danger)' : 'var(--success)' }}>{stock}</strong>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                  <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Min Stock Alert</span>
+                    <strong style={{ fontSize: '0.95rem' }}>{product.minStockLevel ?? 20}</strong>
+                  </div>
+                  <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Max Stock Level</span>
+                    <strong style={{ fontSize: '0.95rem' }}>{product.maxStockLevel || 'N/A'}</strong>
+                  </div>
                 </div>
 
                 {user?.role !== 'Staff' && (

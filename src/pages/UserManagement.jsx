@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import apiClient from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-import { Plus, Users, Search, Edit, Trash2 } from 'lucide-react';
+import { Plus, Users, Search, Edit, Trash2, Key } from 'lucide-react';
 
 const UserManagement = () => {
   const { user } = useContext(AuthContext);
@@ -11,6 +11,13 @@ const UserManagement = () => {
   const [showModal, setShowModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
+  
+  // Custom permissions states
+  const [systemPermissions, setSystemPermissions] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [isCustomPermissions, setIsCustomPermissions] = useState(false);
+  const [userPermissions, setUserPermissions] = useState([]);
+
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -33,13 +40,29 @@ const UserManagement = () => {
     }
   };
 
+  const fetchRolesAndPermissions = async () => {
+    try {
+      const [permsRes, rolesRes] = await Promise.all([
+        apiClient.get('/users/permissions'),
+        apiClient.get('/users/roles')
+      ]);
+      setSystemPermissions(permsRes.data);
+      setRoles(rolesRes.data);
+    } catch (err) {
+      console.error('Failed to fetch system permissions or roles', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchRolesAndPermissions();
   }, []);
 
   const openAddModal = () => {
     setIsEditMode(false);
     setEditingUserId(null);
+    setIsCustomPermissions(false);
+    setUserPermissions([]);
     setNewUser({
       email: '', password: '', fullname: '', role: 'Staff', address: '', phone: '', gender: 'Male'
     });
@@ -58,7 +81,43 @@ const UserManagement = () => {
       phone: u.phone || '',
       gender: u.gender || 'Male'
     });
+
+    const hasCustom = u.permissions !== null && u.permissions !== undefined;
+    setIsCustomPermissions(hasCustom);
+    
+    if (hasCustom) {
+      setUserPermissions(u.permissions);
+    } else {
+      const matchedRole = roles.find(r => r.name === u.role);
+      setUserPermissions(matchedRole ? matchedRole.permissions : []);
+    }
+    
     setShowModal(true);
+  };
+
+  const handleRoleChange = (selectedRoleName) => {
+    setNewUser({ ...newUser, role: selectedRoleName });
+    if (!isCustomPermissions) {
+      const matchedRole = roles.find(r => r.name === selectedRoleName);
+      setUserPermissions(matchedRole ? matchedRole.permissions : []);
+    }
+  };
+
+  const handleCustomPermissionsToggle = (checked) => {
+    setIsCustomPermissions(checked);
+    if (!checked) {
+      const matchedRole = roles.find(r => r.name === newUser.role);
+      setUserPermissions(matchedRole ? matchedRole.permissions : []);
+    }
+  };
+
+  const handlePermissionToggle = (key) => {
+    if (!isCustomPermissions) return;
+    if (userPermissions.includes(key)) {
+      setUserPermissions(userPermissions.filter(k => k !== key));
+    } else {
+      setUserPermissions([...userPermissions, key]);
+    }
   };
 
   const handleDeleteUser = async (id) => {
@@ -82,7 +141,8 @@ const UserManagement = () => {
           role: newUser.role,
           address: newUser.address,
           phone: newUser.phone,
-          gender: newUser.gender
+          gender: newUser.gender,
+          permissions: isCustomPermissions ? userPermissions : null
         };
         await apiClient.patch(`/users/${editingUserId}`, payload);
       } else {
@@ -183,7 +243,7 @@ const UserManagement = () => {
       {/* User Modal */}
       {showModal && (
         <div className="modal-backdrop">
-          <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>{isEditMode ? 'Edit User' : 'Add New User'}</h3>
             <form onSubmit={handleSubmit} style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="form-group mb-4">
@@ -202,10 +262,10 @@ const UserManagement = () => {
               </div>
               <div className="form-group mb-4">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Role</label>
-                <select className="form-input" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
-                  <option value="Staff">Staff</option>
-                  <option value="Manager">Manager</option>
-                  <option value="Admin">Admin</option>
+                <select className="form-input" value={newUser.role} onChange={e => handleRoleChange(e.target.value)}>
+                  {roles.map(r => (
+                    <option key={r.name} value={r.name}>{r.name}</option>
+                  ))}
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '1rem' }}>
@@ -233,6 +293,75 @@ const UserManagement = () => {
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Address</label>
                 <input required type="text" className="form-input" value={newUser.address} onChange={e => setNewUser({...newUser, address: e.target.value})} />
               </div>
+
+              {/* Custom user permissions section */}
+              {isEditMode && newUser.role !== 'Admin' && (
+                <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.75rem', paddingTop: '1.25rem' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <label className="text-title" style={{ fontSize: '1.1rem', marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Key size={18} color="var(--accent-primary)" />
+                      Individual Permission Overrides
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, color: 'var(--accent-primary)' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={isCustomPermissions} 
+                        onChange={e => handleCustomPermissionsToggle(e.target.checked)} 
+                      />
+                      Customize individual permissions
+                    </label>
+                  </div>
+
+                  <div 
+                    style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
+                      gap: '0.75rem', 
+                      maxHeight: '220px', 
+                      overflowY: 'auto',
+                      padding: '0.75rem',
+                      background: 'rgba(255,255,255,0.2)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-color)',
+                      opacity: isCustomPermissions ? 1 : 0.65,
+                      transition: 'opacity 0.2s ease'
+                    }}
+                  >
+                    {systemPermissions.map(perm => {
+                      const isChecked = userPermissions.includes(perm.key);
+                      return (
+                        <label 
+                          key={perm.key} 
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
+                            gap: '0.5rem', 
+                            fontSize: '0.8rem', 
+                            cursor: isCustomPermissions ? 'pointer' : 'not-allowed',
+                            padding: '0.4rem',
+                            borderRadius: '4px',
+                            background: isChecked ? 'rgba(67, 24, 255, 0.05)' : 'transparent',
+                            border: isChecked ? '1px solid rgba(67, 24, 255, 0.15)' : '1px solid transparent',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <input 
+                            type="checkbox" 
+                            checked={isChecked}
+                            disabled={!isCustomPermissions}
+                            onChange={() => handlePermissionToggle(perm.key)}
+                            style={{ marginTop: '0.15rem' }}
+                          />
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{perm.name}</span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{perm.key}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowModal(false)}>Cancel</button>

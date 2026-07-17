@@ -40,7 +40,7 @@ const Login = () => {
           <div className="login-logo-large">
             <Package size={56} color="#fff" />
           </div>
-          <h1 className="banner-title">Antigravity<br />Warehouse System</h1>
+          <h1 className="banner-title">WAREHOUSE<br />MANAGEMENT SYSTEM</h1>
           <p className="banner-subtitle">
             Experience the next generation of logistics management. Seamlessly track inventory, process transactions, and generate insightful reports.
           </p>
