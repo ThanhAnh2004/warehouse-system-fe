@@ -149,14 +149,27 @@ const Inventory = () => {
                   <td style={{ fontWeight: 600 }}>{p.name}</td>
                   <td style={{ fontWeight: 700 }}><span className="text-gradient">{Number(p.price).toLocaleString()} VND</span></td>
                   <td>
-                    <span style={{ fontWeight: 700, color: (p.quantity ?? 0) < (p.minStockLevel || 20) ? 'var(--danger)' : 'var(--text-primary)' }}>
-                      {p.quantity ?? 0}
-                    </span>
-                    {(p.quantity ?? 0) < (p.minStockLevel || 20) && (
-                      <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', backgroundColor: 'var(--danger-light)', color: 'var(--danger)', fontWeight: 600 }}>
-                        Low Stock
-                      </span>
-                    )}
+                    {(() => {
+                      const qty = p.quantity ?? 0;
+                      const isLow = qty < (p.minStockLevel || 20);
+                      const isOver = p.maxStockLevel != null && qty > p.maxStockLevel;
+                      const color = isLow ? 'var(--danger)' : isOver ? 'var(--warning)' : 'var(--text-primary)';
+                      return (
+                        <>
+                          <span style={{ fontWeight: 700, color }}>{qty}</span>
+                          {isLow && (
+                            <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', backgroundColor: 'var(--danger-light)', color: 'var(--danger)', fontWeight: 600 }}>
+                              Low Stock
+                            </span>
+                          )}
+                          {!isLow && isOver && (
+                            <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', backgroundColor: 'var(--warning-light)', color: 'var(--warning)', fontWeight: 600 }}>
+                              Overstock
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </td>
                   <td>
                     <button 

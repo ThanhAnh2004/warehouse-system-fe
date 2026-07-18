@@ -8,8 +8,11 @@ import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
 import ProductDetails from './pages/ProductDetails';
 import Transactions from './pages/Transactions';
+import StockAdjustment from './pages/StockAdjustment';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
+import Alerts from './pages/Alerts';
+import SystemHealth from './pages/SystemHealth';
 import Profile from './pages/Profile';
 import RoleManagement from './pages/RoleManagement';
 
@@ -24,18 +27,21 @@ const App = () => {
             <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager']} />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/alerts" element={<Alerts />} />
             </Route>
             
             <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']} />}>
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/inventory/:sku" element={<ProductDetails />} />
               <Route path="/transactions" element={<Transactions />} />
+              <Route path="/adjustments" element={<StockAdjustment />} />
               <Route path="/profile" element={<Profile />} />
             </Route>
 
             <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
               <Route path="/users" element={<UserManagement />} />
               <Route path="/role-management" element={<RoleManagement />} />
+              <Route path="/system-health" element={<SystemHealth />} />
             </Route>
           </Route>
         </Routes>
