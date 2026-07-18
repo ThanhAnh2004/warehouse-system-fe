@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const TRANSACTION_TYPES = ['INBOUND', 'OUTBOUND', 'TRANSFER', 'ADJUSTMENT'];
+const PAGE_SIZE = 20;
 
 const emptyForm = {
   type: 'INBOUND',
@@ -17,17 +18,21 @@ const Transactions = () => {
   const [transactions, setTransactions] = useState([]);
   const [products, setProducts] = useState([]);
   const [productMap, setProductMap] = useState({});
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [form, setForm] = useState(emptyForm);
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   const fetchData = async () => {
     setLoading(true);
     try {
       const [transRes, prodRes] = await Promise.all([
-        apiClient.get('/transactions'),
+        apiClient.get('/transactions', { params: { page, limit: PAGE_SIZE } }),
         apiClient.get('/inventory/products?limit=1000') // Fetch products for mapping
       ]);
 
@@ -38,7 +43,28 @@ const Transactions = () => {
       });
       setProducts(list);
       setProductMap(map);
-      setTransactions(transRes.data);
+
+      const txData = (transRes.data && transRes.data.data) || [];
+      setTransactions(txData);
+      setTotal((transRes.data && transRes.data.total) || 0);
+
+      // Tra tên người tạo cho từng giao dịch. Dùng GET /users/:id (không giới hạn role)
+      // thay vì GET /users (chỉ Admin) để Manager/Staff cũng xem được ai tạo giao dịch.
+      const creatorIds = [...new Set(txData.map(t => t.createdBy).filter(Boolean))];
+      if (creatorIds.length > 0) {
+        const results = await Promise.all(
+          creatorIds.map(id =>
+            apiClient.get(`/users/${id}`).then(r => [id, r.data]).catch(() => [id, null])
+          )
+        );
+        const cMap = {};
+        results.forEach(([id, data]) => {
+          if (data) cMap[id] = data.fullname || data.email;
+        });
+        setCreatorMap(cMap);
+      } else {
+        setCreatorMap({});
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -48,7 +74,7 @@ const Transactions = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page]);
 
   const openModal = () => {
     setForm(emptyForm);
@@ -76,6 +102,10 @@ const Transactions = () => {
       setFormError('Please specify both source and destination locations for a transfer.');
       return;
     }
+    if (form.type === 'ADJUSTMENT' && !form.locationTo) {
+      setFormError('Please specify the location being adjusted.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -88,6 +118,7 @@ const Transactions = () => {
         note: form.note || undefined,
       });
       setShowModal(false);
+      setPage(1);
       fetchData();
     } catch (err) {
       setFormError(err.response?.data?.message || 'Failed to save transaction.');
@@ -97,6 +128,7 @@ const Transactions = () => {
   };
 
   return (
+    <>
     <div className="animate-slide-up">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
         <h2 className="text-title">Transactions History</h2>
@@ -115,11 +147,12 @@ const Transactions = () => {
                 <th>Quantity</th>
                 <th>Status</th>
                 <th>Date</th>
+                <th>Note</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
               ) : transactions.map(t => (
                 <tr key={t.id}>
                   <td>
@@ -140,17 +173,59 @@ const Transactions = () => {
                     </span>
                   </td>
                   <td style={{ color: 'var(--text-secondary)' }}>{new Date(t.createdAt).toLocaleString()}</td>
+                  <td
+                    style={{
+                      color: t.status === 'FAILED' ? 'var(--danger)' : 'var(--text-secondary)',
+                      maxWidth: '220px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={t.note || ''}
+                  >
+                    {t.note || '—'}
+                  </td>
                 </tr>
               ))}
               {transactions.length === 0 && !loading && (
-                <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>No transactions found</td></tr>
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>No transactions found</td></tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {showModal && (
+        {!loading && total > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, total)} of {total} transactions
+            </span>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-icon"
+                disabled={page <= 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                style={{ opacity: page <= 1 ? 0.4 : 1 }}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Page {page} / {totalPages}</span>
+              <button
+                type="button"
+                className="btn btn-icon"
+                disabled={page >= totalPages}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                style={{ opacity: page >= totalPages ? 0.4 : 1 }}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+
+    {showModal && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>New Transaction</h3>
@@ -182,11 +257,13 @@ const Transactions = () => {
               </div>
 
               <div className="form-group mb-4">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Quantity</label>
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>
+                  Quantity {form.type === 'ADJUSTMENT' && <span style={{ fontWeight: 'normal' }}>(có thể âm - vd -5 nếu hao hụt)</span>}
+                </label>
                 <input
                   required
                   type="number"
-                  min="1"
+                  min={form.type === 'ADJUSTMENT' ? undefined : '1'}
                   className="form-input"
                   value={form.quantity}
                   onChange={e => setForm({ ...form, quantity: e.target.value })}
@@ -219,6 +296,19 @@ const Transactions = () => {
                 </div>
               )}
 
+              {form.type === 'ADJUSTMENT' && (
+                <div className="form-group mb-4">
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Location</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. DEFAULT_WAREHOUSE"
+                    className="form-input"
+                    value={form.locationTo}
+                    onChange={e => setForm({ ...form, locationTo: e.target.value })}
+                  />
+                </div>
+              )}
+
               <div className="form-group mb-4">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Note</label>
                 <input
@@ -241,7 +331,7 @@ const Transactions = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

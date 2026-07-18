@@ -64,24 +64,5 @@
   border: 1px dashed var(--border-color);
 }
 
-/* Modal */
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(11, 20, 55, 0.4);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-}
-
-.modal-content {
-  width: 100%;
-  max-width: 500px;
-  background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-}
+/* .modal-backdrop / .modal-content: chuyển sang index.css (CSS toàn cục) vì Transactions.jsx
+   và UserManagement.jsx cũng dùng chung 2 class này. */

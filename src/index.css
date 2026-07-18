@@ -298,3 +298,28 @@ button {
 .animate-slide-up {
   animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
+
+/* Modal - dùng chung cho mọi trang (Inventory, Transactions, Users...) nên phải nằm ở
+   CSS toàn cục thay vì 1 file CSS riêng của từng trang. */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Không đặt backdrop-filter ở đây nữa: modal-content (qua class glass-card) đã tự có
+     backdrop-filter riêng. Chồng 2 lớp backdrop-filter lồng nhau (backdrop + card) khiến
+     một số trình duyệt/GPU render ra vùng nhòe đặc, chữ bên trong không đọc được dù DOM/CSS
+     đều đúng - đây chính là nguyên nhân modal "New Transaction" bị mờ không thấy chữ. */
+  background: rgba(11, 20, 55, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal-content {
+  width: 100%;
+  max-width: 500px;
+  background: var(--bg-glass);
+}

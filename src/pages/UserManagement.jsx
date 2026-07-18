@@ -100,6 +100,7 @@ const UserManagement = () => {
   );
 
   return (
+    <>
     <div className="animate-slide-up">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
         <h2 className="text-title">User Management</h2>
@@ -161,9 +162,10 @@ const UserManagement = () => {
           </table>
         </div>
       </div>
+    </div>
 
-      {/* Add User Modal */}
-      {showModal && (
+    {/* Add User Modal */}
+    {showModal && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>Add New User</h3>
@@ -211,8 +213,8 @@ const UserManagement = () => {
         </div>
       )}
 
-      {/* Edit User Modal */}
-      {editingUser && (
+    {/* Edit User Modal */}
+    {editingUser && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>Edit User</h3>
@@ -255,7 +257,7 @@ const UserManagement = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

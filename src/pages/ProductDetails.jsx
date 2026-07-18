@@ -139,7 +139,7 @@ const ProductDetails = () => {
                       itemStyle={{ color: 'var(--accent-primary)' }}
                     />
                     <Legend />
-                    <Line type="monotone" dataKey="predicted_demand" stroke="var(--accent-primary)" strokeWidth={3} activeDot={{ r: 8 }} name="Predicted Demand" />
+                    <Line type="monotone" dataKey="predictedQuantity" stroke="var(--accent-primary)" strokeWidth={3} activeDot={{ r: 8 }} name="Predicted Demand" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

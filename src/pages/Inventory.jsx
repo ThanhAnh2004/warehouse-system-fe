@@ -113,6 +113,7 @@ const Inventory = () => {
   };
 
   return (
+    <>
     <div className="inventory-page animate-slide-up">
       <div className="page-header">
         <h2 className="text-title">Inventory Management</h2>
@@ -196,9 +197,10 @@ const Inventory = () => {
           </table>
         </div>
       </div>
+    </div>
 
-      {/* Add Product Modal */}
-      {showModal && (
+    {/* Add Product Modal */}
+    {showModal && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up">
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>Add New Product</h3>
@@ -238,8 +240,8 @@ const Inventory = () => {
         </div>
       )}
 
-      {/* Edit Product Modal */}
-      {editingProduct && (
+    {/* Edit Product Modal */}
+    {editingProduct && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up">
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>Edit Product</h3>
@@ -274,7 +276,7 @@ const Inventory = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

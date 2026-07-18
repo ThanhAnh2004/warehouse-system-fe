@@ -17,8 +17,9 @@ const Login = () => {
     setLoading(true);
     setError('');
     try {
-      await login(formData.email, formData.password);
-      navigate('/');
+      const loggedInUser = await login(formData.email, formData.password);
+      // "/" (Dashboard) chỉ dành cho Admin/Manager; Staff phải vào thẳng trang họ được phép xem.
+      navigate(loggedInUser.role === 'Staff' ? '/inventory' : '/');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -115,9 +116,9 @@ const Login = () => {
           <div className="login-footer">
             <p>Demo Credentials:</p>
             <div className="demo-creds">
-              <span><b>Admin:</b> admin@gmail.com / 123456</span>
-              <span><b>Manager:</b> manager@gmail.com / 123456</span>
-              <span><b>Staff:</b> staff@gmail.com / 123456</span>
+              <span><b>Admin:</b> admin@gmail.com / password123</span>
+              <span><b>Manager:</b> manager@gmail.com / password123</span>
+              <span><b>Staff:</b> staff@gmail.com / password123</span>
             </div>
           </div>
         </div>
