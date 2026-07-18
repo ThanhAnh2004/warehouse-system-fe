@@ -9,14 +9,11 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [summaryRes, analyticsRes] = await Promise.all([
-          apiClient.get('/reports/summary'),
-          apiClient.get('/reports/analytics'),
-        ]);
+        const response = await apiClient.get('/reports/summary');
         setData({
-          totalProducts: summaryRes.data.totalProducts,
-          lowStock: analyticsRes.data.lowStockCount,
-          transactionsToday: summaryRes.data.totalImports + summaryRes.data.totalExports
+          totalProducts: response.data.totalProducts,
+          lowStock: response.data.lowStock || 0,
+          transactionsToday: response.data.totalImports + response.data.totalExports
         });
       } catch (error) {
         console.error('Failed to fetch dashboard data', error);

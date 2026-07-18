@@ -41,7 +41,7 @@ const Login = () => {
           <div className="login-logo-large">
             <Package size={56} color="#fff" />
           </div>
-          <h1 className="banner-title">Antigravity<br />Warehouse System</h1>
+          <h1 className="banner-title">WAREHOUSE<br />MANAGEMENT SYSTEM</h1>
           <p className="banner-subtitle">
             Experience the next generation of logistics management. Seamlessly track inventory, process transactions, and generate insightful reports.
           </p>
@@ -68,7 +68,7 @@ const Login = () => {
 
           {error && <div className="login-error">{error}</div>}
 
-          <form onSubmit={handleSubmit} className="login-form">
+          <form onSubmit={handleSubmit} className="login-form" autoComplete="off">
             <div className="form-group">
               <label className="form-label">Email</label>
               <div className="input-with-icon">
@@ -80,6 +80,7 @@ const Login = () => {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                   placeholder="Enter your email"
+                  autoComplete="off"
                 />
               </div>
             </div>
@@ -95,6 +96,7 @@ const Login = () => {
                   required
                   minLength={6}
                   placeholder="Enter your password"
+                  autoComplete="new-password"
                 />
                 <button 
                   type="button" 
@@ -112,15 +114,6 @@ const Login = () => {
               {!loading && <ArrowRight size={18} />}
             </button>
           </form>
-          
-          <div className="login-footer">
-            <p>Demo Credentials:</p>
-            <div className="demo-creds">
-              <span><b>Admin:</b> admin@gmail.com / password123</span>
-              <span><b>Manager:</b> manager@gmail.com / password123</span>
-              <span><b>Staff:</b> staff@gmail.com / password123</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>

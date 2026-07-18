@@ -11,7 +11,13 @@ export const AuthProvider = ({ children }) => {
   const performLoginState = (token, refreshToken) => {
     // Decode JWT token to get user info
     const payload = JSON.parse(atob(token.split('.')[1]));
-    const userData = { email: payload.email, id: payload.sub, role: payload.role, fullname: payload.fullname };
+    const userData = { 
+      email: payload.email, 
+      id: payload.sub, 
+      role: payload.role, 
+      permissions: payload.permissions || [],
+      fullname: payload.fullname 
+    };
     
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
@@ -109,8 +115,17 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateUser = (newUserData) => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      const updated = { ...JSON.parse(storedUser), ...newUserData };
+      localStorage.setItem('user', JSON.stringify(updated));
+      setUser(updated);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, updateUser }}>
       {!loading && children}
     </AuthContext.Provider>
   );
