@@ -4,6 +4,7 @@ import apiClient from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import { ArrowLeft, TrendingUp, PackageSearch } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import EoqCard from '../components/EoqCard';
 
 const ProductDetails = () => {
   const { sku } = useParams();
@@ -245,9 +246,20 @@ const ProductDetails = () => {
                   <strong style={{ fontSize: '1.1rem', color: 'var(--accent-primary)' }}>{Number(product.price).toLocaleString()} VND</strong>
                 </div>
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '0.5rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Current Stock</span>
-                  <strong style={{ fontSize: '1.2rem', color: stock < (product.minStockLevel || 20) ? 'var(--danger)' : 'var(--success)' }}>{stock}</strong>
+                  {(() => {
+                    const isLow = stock < (product.minStockLevel || 20);
+                    const isOver = product.maxStockLevel != null && stock > product.maxStockLevel;
+                    const color = isLow ? 'var(--danger)' : isOver ? 'var(--warning)' : 'var(--success)';
+                    return (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {isLow && <span className="badge" style={{ background: 'var(--danger-light)', color: 'var(--danger)', fontSize: '0.7rem' }}>Low Stock</span>}
+                        {!isLow && isOver && <span className="badge" style={{ background: 'var(--warning-light)', color: 'var(--warning)', fontSize: '0.7rem' }}>Overstock</span>}
+                        <strong style={{ fontSize: '1.2rem', color }}>{stock}</strong>
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.5rem' }}>
@@ -284,14 +296,15 @@ const ProductDetails = () => {
           </div>
         </div>
 
-        {/* Right Column: AI Forecast Chart */}
+        {/* Right Column: AI Forecast Chart + EOQ */}
         {user?.role !== 'Staff' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
               <TrendingUp size={24} color="var(--accent-primary)" />
               <h3 style={{ fontSize: '1.25rem' }}>AI Demand Forecast (7 Days)</h3>
             </div>
-            
+
             {forecast.length > 0 ? (
               <div style={{ width: '100%', height: '350px' }}>
                 <ResponsiveContainer>
@@ -304,7 +317,7 @@ const ProductDetails = () => {
                       itemStyle={{ color: 'var(--accent-primary)' }}
                     />
                     <Legend />
-                    <Line type="monotone" dataKey="predicted_demand" stroke="var(--accent-primary)" strokeWidth={3} activeDot={{ r: 8 }} name="Predicted Demand" />
+                    <Line type="monotone" dataKey="predictedQuantity" stroke="var(--accent-primary)" strokeWidth={3} activeDot={{ r: 8 }} name="Predicted Demand" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -313,6 +326,9 @@ const ProductDetails = () => {
                 <p>Not enough transaction data to generate AI forecast yet.</p>
               </div>
             )}
+          </div>
+
+          <EoqCard product={product} forecast={forecast} />
           </div>
         )}
       </div>

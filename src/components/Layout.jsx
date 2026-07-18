@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell, Trash2, Sun, Moon, Shield } from 'lucide-react';
+import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell, Trash2, Sun, Moon, Shield, Activity, ClipboardList } from 'lucide-react';
 import apiClient from '../api/client';
 import './Layout.css';
 
@@ -92,6 +92,11 @@ const Layout = () => {
             <span>Transactions</span>
           </NavLink>
 
+          <NavLink to="/adjustments" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <ClipboardList size={20} />
+            <span>Adjustments</span>
+          </NavLink>
+
           {user?.role === 'Admin' && (
             <>
               <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -102,14 +107,29 @@ const Layout = () => {
                 <Shield size={20} />
                 <span>Permissions</span>
               </NavLink>
+              <NavLink to="/system-health" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Activity size={20} />
+                <span>System Health</span>
+              </NavLink>
             </>
           )}
 
           {(user?.role === 'Admin' || user?.role === 'Manager') && (
-            <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <FileText size={20} />
-              <span>Reports</span>
-            </NavLink>
+            <>
+              <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <FileText size={20} />
+                <span>Reports</span>
+              </NavLink>
+              <NavLink to="/alerts" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Bell size={20} />
+                <span>Alerts</span>
+                {unreadCount > 0 && (
+                  <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: '#fff', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, minWidth: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </NavLink>
+            </>
           )}
         </nav>
 
@@ -183,9 +203,9 @@ const Layout = () => {
                           onClick={() => !notif.isRead && markAsRead(notif._id)}
                         >
                           <div className="flex justify-between items-center" style={{ marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              {!notif.isRead && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)' }}></span>}
-                              Low Stock Alert
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: notif.alertType === 'OVERSTOCK' ? 'var(--warning)' : 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              {!notif.isRead && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: notif.alertType === 'OVERSTOCK' ? 'var(--warning)' : 'var(--danger)' }}></span>}
+                              {notif.alertType === 'OVERSTOCK' ? 'Overstock Alert' : 'Low Stock Alert'}
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
