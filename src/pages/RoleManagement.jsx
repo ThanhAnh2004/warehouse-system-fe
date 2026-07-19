@@ -368,6 +368,7 @@ const RoleManagement = () => {
               <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                    <th style={{ padding: '0.75rem 1rem', width: '45px', textAlign: 'center' }}>#</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Role Name</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Description</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Permissions</th>
@@ -375,10 +376,11 @@ const RoleManagement = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {roles.map(role => {
+                  {roles.map((role, idx) => {
                     const isSystemRole = ['Admin', 'Manager', 'Staff'].includes(role.name);
                     return (
                       <tr key={role.name} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
                         <td style={{ padding: '1rem' }}>
                           <strong style={{ 
                             color: role.name === 'Admin' ? '#ef4444' : (role.name === 'Manager' ? 'var(--accent-primary)' : 'var(--text-primary)') 

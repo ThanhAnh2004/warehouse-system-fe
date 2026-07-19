@@ -349,6 +349,7 @@ const Reports = () => {
                 <table className="data-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
+                      <th style={{ width: '45px', textAlign: 'center' }}>#</th>
                       <th>Category</th>
                       <th style={{ textAlign: 'right' }}>Items</th>
                       <th style={{ textAlign: 'right' }}>Qty</th>
@@ -357,9 +358,10 @@ const Reports = () => {
                   </thead>
                   <tbody>
                     {analytics.categoryBreakdown.length === 0 ? (
-                      <tr><td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>No data</td></tr>
-                    ) : analytics.categoryBreakdown.map((c) => (
+                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>No data</td></tr>
+                    ) : analytics.categoryBreakdown.map((c, idx) => (
                       <tr key={c.category}>
+                        <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
                         <td style={{ fontWeight: 600 }}>{c.category}</td>
                         <td style={{ textAlign: 'right' }}>{c.count}</td>
                         <td style={{ textAlign: 'right' }}>{c.totalQty}</td>
@@ -378,6 +380,7 @@ const Reports = () => {
                 <table className="data-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
+                      <th style={{ width: '45px', textAlign: 'center' }}>#</th>
                       <th>Product</th>
                       <th style={{ textAlign: 'right' }}>Qty</th>
                       <th style={{ textAlign: 'right' }}>Value</th>
@@ -385,9 +388,10 @@ const Reports = () => {
                   </thead>
                   <tbody>
                     {analytics.topProductsByValue.length === 0 ? (
-                      <tr><td colSpan="3" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>No data</td></tr>
-                    ) : analytics.topProductsByValue.map((p) => (
+                      <tr><td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>No data</td></tr>
+                    ) : analytics.topProductsByValue.map((p, idx) => (
                       <tr key={p.sku}>
+                        <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
                         <td style={{ fontWeight: 600 }}>{p.name}<div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>{p.sku}</div></td>
                         <td style={{ textAlign: 'right' }}>{p.quantity}</td>
                         <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent-primary)' }}>{fmtVND(p.value)}</td>
@@ -442,6 +446,7 @@ const Reports = () => {
               <table className="data-table" style={{ width: '100%' }}>
                 <thead>
                   <tr>
+                    <th style={{ width: '45px', textAlign: 'center' }}>#</th>
                     <th>Product</th>
                     <th>SKU</th>
                     <th style={{ textAlign: 'right' }}>Current Stock</th>
@@ -452,11 +457,12 @@ const Reports = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {forecastTrends.products.map((p) => {
+                  {forecastTrends.products.map((p, idx) => {
                     // Cảnh báo: nếu dự báo nhu cầu vượt tồn kho hiện tại -> cần nhập thêm
                     const needRestock = p.totalForecast > p.currentStock;
                     return (
                       <tr key={p.productId}>
+                        <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
                         <td style={{ fontWeight: 600 }}>{p.name}</td>
                         <td style={{ color: 'var(--text-secondary)' }}>{p.sku}</td>
                         <td style={{ textAlign: 'right', fontWeight: 700 }}>{p.currentStock}</td>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import { Plus, Search, Image as ImageIcon } from 'lucide-react';
@@ -118,6 +119,7 @@ const Inventory = () => {
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ width: '50px', textAlign: 'center' }}>#</th>
                 <th>Image</th>
                 <th onClick={() => handleSort('sku')} style={{ cursor: 'pointer', userSelect: 'none' }}>
                   SKU {sortBy === 'sku' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
@@ -136,9 +138,12 @@ const Inventory = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
-              ) : products.map(p => (
+                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+              ) : products.map((p, index) => (
                 <tr key={p.id}>
+                  <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    {(page - 1) * 10 + index + 1}
+                  </td>
                   <td>
                     {p.imageUrl ? 
                       <img src={p.imageUrl} alt={p.name} className="product-img" /> : 
@@ -212,8 +217,11 @@ const Inventory = () => {
       </div>
 
       {/* Add Product Modal */}
-      {showModal && (
-        <div className="modal-backdrop">
+      {showModal && ReactDOM.createPortal(
+        <div 
+          className="modal-backdrop" 
+          onClick={(e) => { if (e.target.classList.contains('modal-backdrop')) setShowModal(false); }}
+        >
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>Add New Product</h3>
             <form onSubmit={handleAddProduct} style={{ marginTop: '1.5rem' }}>
@@ -260,7 +268,8 @@ const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

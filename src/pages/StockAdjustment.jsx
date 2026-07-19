@@ -192,6 +192,7 @@ const StockAdjustment = () => {
             <table className="data-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
+                  <th style={{ width: '45px', textAlign: 'center' }}>#</th>
                   <th>Type</th>
                   <th>Product</th>
                   <th style={{ textAlign: 'right' }}>Qty</th>
@@ -201,15 +202,16 @@ const StockAdjustment = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                 ) : recent.length === 0 ? (
-                  <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>No adjustments recorded yet.</td></tr>
-                ) : recent.map((t) => {
+                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>No adjustments recorded yet.</td></tr>
+                ) : recent.map((t, idx) => {
                   const isIn = t.type === 'INBOUND';
                   const reason = t.note.replace(/^\[ADJUSTMENT:[^\]]*\]\s*/, '');
                   const typeLabel = (t.note.match(/^\[ADJUSTMENT:([^\]]*)\]/) || [])[1] || '-';
                   return (
                     <tr key={t.id}>
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
                       <td>
                         <span className={`badge ${isIn ? 'badge-success' : 'badge-danger'}`}>{typeLabel}</span>
                       </td>
