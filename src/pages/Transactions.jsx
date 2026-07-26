@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
-import { Plus, Search, Download, Calendar, ChevronDown, ChevronUp, FileText, ArrowRight } from 'lucide-react';
+import {
+  Plus, Search, Download, Calendar, ChevronDown, ChevronUp, ChevronRight,
+  FileText, ArrowRight, ArrowDownCircle, ArrowUpCircle, Repeat, SlidersHorizontal,
+} from 'lucide-react';
+
+const PAGE_SIZE = 10;
+
+const TX_TYPES = [
+  { key: 'INBOUND', label: 'Inbound', badge: 'badge-success', Icon: ArrowDownCircle },
+  { key: 'OUTBOUND', label: 'Outbound', badge: 'badge-danger', Icon: ArrowUpCircle },
+  { key: 'TRANSFER', label: 'Transfer', badge: 'badge-primary', Icon: Repeat },
+  { key: 'ADJUSTMENT', label: 'Adjustment', badge: 'badge-warning', Icon: SlidersHorizontal },
+];
+
+const fmtVND = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n || 0);
 
 const Transactions = () => {
-  const [transactions, setTransactions] = useState([]);
   const [productMap, setProductMap] = useState({});
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('DESC');
-  const [typeFilter, setTypeFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [datePreset, setDatePreset] = useState('ALL');
@@ -29,6 +38,14 @@ const Transactions = () => {
     locationTo: 'DEFAULT_WAREHOUSE',
     note: ''
   });
+
+  // Số lượng giao dịch theo từng loại (badge trên header mỗi nhóm)
+  const [counts, setCounts] = useState({});
+  const [countsLoading, setCountsLoading] = useState(true);
+
+  // Nhóm nào đang mở, và dữ liệu/phân trang riêng của từng nhóm
+  const [expanded, setExpanded] = useState({});
+  const [groups, setGroups] = useState({});
 
   const handleDatePresetChange = (preset) => {
     setDatePreset(preset);
@@ -53,22 +70,12 @@ const Transactions = () => {
       setStartDate('');
       setEndDate('');
     }
-    setPage(1);
   };
 
   const handleExportCSV = async () => {
     try {
       const res = await apiClient.get('/transactions', {
-        params: { 
-          page: 1, 
-          limit: 5000, 
-          search: search.trim(), 
-          sortBy, 
-          sortOrder, 
-          type: typeFilter,
-          startDate,
-          endDate
-        }
+        params: { page: 1, limit: 5000, search: search.trim(), sortBy, sortOrder, startDate, endDate }
       });
       const list = res.data?.data || [];
       if (list.length === 0) {
@@ -96,7 +103,7 @@ const Transactions = () => {
         ];
       });
 
-      const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+      const csvContent = 'data:text/csv;charset=utf-8,﻿' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement('a');
       link.setAttribute('href', encodedUri);
@@ -144,38 +151,62 @@ const Transactions = () => {
     fetchProducts();
   }, []);
 
-  // Fetch transactions on search, page, sort, typeFilter, date range change
+  // Đếm số giao dịch theo từng loại - phục vụ hiển thị badge trên mỗi nhóm
   useEffect(() => {
-    const fetchTransactions = async () => {
-      setLoading(true);
+    const fetchCounts = async () => {
+      setCountsLoading(true);
       try {
-        const transRes = await apiClient.get('/transactions', {
-          params: { 
-            page, 
-            limit: 10, 
-            search: search.trim(), 
-            sortBy, 
-            sortOrder, 
-            type: typeFilter,
-            startDate,
-            endDate
-          }
-        });
-        setTransactions(transRes.data.data || []);
-        setTotal(transRes.data.total || 0);
+        const results = await Promise.all(
+          TX_TYPES.map(t => apiClient.get('/transactions', {
+            params: { type: t.key, limit: 1, search: search.trim(), startDate, endDate }
+          }))
+        );
+        const next = {};
+        results.forEach((res, i) => { next[TX_TYPES[i].key] = res.data.total || 0; });
+        setCounts(next);
       } catch (err) {
         console.error(err);
       } finally {
-        setLoading(false);
+        setCountsLoading(false);
       }
     };
-    fetchTransactions();
-  }, [page, search, sortBy, sortOrder, typeFilter, startDate, endDate, refreshKey]);
+    fetchCounts();
+  }, [search, startDate, endDate, refreshKey]);
+
+  const fetchGroup = async (type, page = 1) => {
+    setGroups(prev => ({ ...prev, [type]: { ...(prev[type] || {}), loading: true } }));
+    try {
+      const res = await apiClient.get('/transactions', {
+        params: { type, page, limit: PAGE_SIZE, search: search.trim(), sortBy, sortOrder, startDate, endDate }
+      });
+      setGroups(prev => ({
+        ...prev,
+        [type]: { data: res.data.data || [], total: res.data.total || 0, page, loading: false }
+      }));
+    } catch (err) {
+      console.error(err);
+      setGroups(prev => ({ ...prev, [type]: { ...(prev[type] || {}), loading: false } }));
+    }
+  };
+
+  const toggleGroup = (type) => {
+    const willExpand = !expanded[type];
+    setExpanded(prev => ({ ...prev, [type]: willExpand }));
+    if (willExpand) fetchGroup(type, 1);
+  };
+
+  // Khi search/sort/khoảng ngày đổi hoặc có giao dịch mới, làm mới các nhóm đang mở (về trang 1)
+  useEffect(() => {
+    Object.keys(expanded).forEach(type => {
+      if (expanded[type]) fetchGroup(type, 1);
+    });
+  }, [search, sortBy, sortOrder, startDate, endDate, refreshKey]);
 
   const handleCreateTransaction = async (e) => {
     e.preventDefault();
     try {
       const qty = parseInt(newTransaction.quantity, 10);
+      // ADJUSTMENT cho phep so luong am (giam ton kho thuc te), cac loai con lai phai duong.
       if (isNaN(qty) || (newTransaction.type === 'ADJUSTMENT' ? qty === 0 : qty <= 0)) {
         alert(
           newTransaction.type === 'ADJUSTMENT'
@@ -199,13 +230,14 @@ const Transactions = () => {
         payload.locationFrom = newTransaction.locationFrom;
         payload.locationTo = newTransaction.locationTo;
       } else if (newTransaction.type === 'ADJUSTMENT') {
+        // Backend chi yeu cau locationFrom HOAC locationTo - dung locationTo (kho dang dieu chinh).
         payload.locationTo = newTransaction.locationTo;
       }
 
       await apiClient.post('/transactions', payload);
       setShowModal(false);
       setProductSearch('');
-      
+
       setNewTransaction({
         productId: products.length > 0 ? products[0].id : '',
         type: 'INBOUND',
@@ -214,8 +246,9 @@ const Transactions = () => {
         locationTo: 'DEFAULT_WAREHOUSE',
         note: ''
       });
-      
-      setPage(1);
+
+      // Mở luôn nhóm vừa tạo giao dịch để người dùng thấy ngay kết quả
+      setExpanded(prev => ({ ...prev, [payload.type]: true }));
       setRefreshKey(prev => prev + 1);
     } catch (err) {
       alert('Error creating transaction: ' + (err.response?.data?.message || err.message));
@@ -229,26 +262,18 @@ const Transactions = () => {
       setSortBy(field);
       setSortOrder('ASC');
     }
-    setPage(1);
   };
 
-  // Calculate summary metrics for current page
-  const inboundCount = transactions.filter(t => t.type === 'INBOUND').length;
-  const inboundUnits = transactions.filter(t => t.type === 'INBOUND').reduce((sum, t) => sum + (t.quantity || 0), 0);
-  const inboundVal = transactions.filter(t => t.type === 'INBOUND').reduce((sum, t) => sum + (t.quantity * (productMap[t.productId]?.price || 0)), 0);
-
-  const outboundCount = transactions.filter(t => t.type === 'OUTBOUND').length;
-  const outboundUnits = transactions.filter(t => t.type === 'OUTBOUND').reduce((sum, t) => sum + (t.quantity || 0), 0);
-  const outboundVal = transactions.filter(t => t.type === 'OUTBOUND').reduce((sum, t) => sum + (t.quantity * (productMap[t.productId]?.price || 0)), 0);
+  const totalAllTypes = TX_TYPES.reduce((sum, t) => sum + (counts[t.key] || 0), 0);
 
   return (
     <div className="animate-slide-up">
       {/* Header */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 className="text-title" style={{ margin: 0 }}>Transactions Management</h2>
+          <h2 className="text-title" style={{ margin: 0 }}>Transactions History</h2>
           <p className="text-subtitle" style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>
-            Real-time audit log, inbound/outbound dispatches, and inventory flow tracking
+            Grouped by type - click a group to see its detailed audit log
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -262,40 +287,16 @@ const Transactions = () => {
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-4" style={{ marginBottom: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
         <div className="glass-card" style={{ padding: '1.2rem' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             Total Filtered Records
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.4rem' }}>
-            {total.toLocaleString()}
+            {countsLoading ? '...' : totalAllTypes.toLocaleString()}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
             Transactions matched
-          </div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '1.2rem', borderLeft: '4px solid var(--success)' }}>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
-            Inbound Restock (Page)
-          </div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--success)', marginTop: '0.4rem' }}>
-            +{inboundUnits.toLocaleString()} units
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem', fontWeight: 500 }}>
-            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(inboundVal)} ({inboundCount} orders)
-          </div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '1.2rem', borderLeft: '4px solid var(--danger)' }}>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
-            Outbound Sales (Page)
-          </div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--danger)', marginTop: '0.4rem' }}>
-            -{outboundUnits.toLocaleString()} units
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem', fontWeight: 500 }}>
-            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(outboundVal)} ({outboundCount} orders)
           </div>
         </div>
 
@@ -304,7 +305,7 @@ const Transactions = () => {
             Active Date Scope
           </div>
           <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-primary)', marginTop: '0.4rem' }}>
-            {datePreset === 'ALL' ? 'All Time History' : datePreset}
+            {datePreset === 'ALL' ? 'All Time History' : datePreset === 'CUSTOM' ? 'Custom Range' : datePreset}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
             {startDate ? `${startDate} ~ ${endDate}` : 'No date restriction'}
@@ -312,35 +313,20 @@ const Transactions = () => {
         </div>
       </div>
 
-      <div className="glass-card">
-        {/* Toolbar & Filters */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem', padding: '0.5rem' }}>
-          {/* Top Row: Search + Type Filter + Sort */}
+      {/* Toolbar & Filters */}
+      <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.5rem' }}>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: '1rem', flex: 1, flexWrap: 'wrap', alignItems: 'center', maxWidth: '800px' }}>
+            <div style={{ display: 'flex', gap: '1rem', flex: 1, flexWrap: 'wrap', alignItems: 'center', maxWidth: '700px' }}>
               <div className="search-box" style={{ flex: 1, minWidth: '220px' }}>
                 <Search size={18} color="var(--text-secondary)" />
-                <input 
-                  type="text" 
-                  placeholder="Search by product, SKU, note..." 
-                  value={search} 
-                  onChange={e => { setSearch(e.target.value); setPage(1); }} 
+                <input
+                  type="text"
+                  placeholder="Search by product, SKU, note..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
                 />
               </div>
-
-              {/* Type Filter */}
-              <select
-                className="form-input"
-                value={typeFilter}
-                onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
-                style={{ width: 'auto', minWidth: '130px', cursor: 'pointer' }}
-              >
-                <option value="">All Types</option>
-                <option value="INBOUND">INBOUND</option>
-                <option value="OUTBOUND">OUTBOUND</option>
-                <option value="TRANSFER">TRANSFER</option>
-                <option value="ADJUSTMENT">ADJUSTMENT</option>
-              </select>
 
               {/* Date Preset Filter */}
               <select
@@ -364,7 +350,6 @@ const Transactions = () => {
                   const [field, order] = e.target.value.split(':');
                   setSortBy(field);
                   setSortOrder(order);
-                  setPage(1);
                 }}
                 style={{ width: 'auto', minWidth: '170px', cursor: 'pointer' }}
               >
@@ -372,14 +357,12 @@ const Transactions = () => {
                 <option value="createdAt:ASC">Date (Oldest First)</option>
                 <option value="quantity:DESC">Quantity (High to Low)</option>
                 <option value="quantity:ASC">Quantity (Low to High)</option>
-                <option value="type:ASC">Type (A-Z)</option>
-                <option value="type:DESC">Type (Z-A)</option>
                 <option value="status:ASC">Status (A-Z)</option>
               </select>
             </div>
 
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>
-              Showing {transactions.length} of {total}
+              Total: {countsLoading ? '...' : totalAllTypes} transactions
             </div>
           </div>
 
@@ -392,7 +375,7 @@ const Transactions = () => {
               type="date"
               className="form-input"
               value={startDate}
-              onChange={e => { setStartDate(e.target.value); setDatePreset('CUSTOM'); setPage(1); }}
+              onChange={e => { setStartDate(e.target.value); setDatePreset('CUSTOM'); }}
               style={{ width: 'auto', padding: '0.5rem 0.8rem', fontSize: '0.85rem' }}
             />
             <span style={{ color: 'var(--text-secondary)' }}>to</span>
@@ -400,7 +383,7 @@ const Transactions = () => {
               type="date"
               className="form-input"
               value={endDate}
-              onChange={e => { setEndDate(e.target.value); setDatePreset('CUSTOM'); setPage(1); }}
+              onChange={e => { setEndDate(e.target.value); setDatePreset('CUSTOM'); }}
               style={{ width: 'auto', padding: '0.5rem 0.8rem', fontSize: '0.85rem' }}
             />
             {(startDate || endDate) && (
@@ -415,191 +398,213 @@ const Transactions = () => {
             )}
           </div>
         </div>
-
-        {/* Master-Detail Data Table */}
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th style={{ width: '45px', textAlign: 'center' }}>#</th>
-                <th style={{ width: '35px' }}></th>
-                <th 
-                  onClick={() => handleSort('type')} 
-                  style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'type' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'type' ? 700 : 'normal' }}
-                >
-                  TYPE {sortBy === 'type' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
-                </th>
-                <th>PRODUCT</th>
-                <th 
-                  onClick={() => handleSort('quantity')} 
-                  style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'quantity' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'quantity' ? 700 : 'normal' }}
-                >
-                  QUANTITY {sortBy === 'quantity' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
-                </th>
-                <th>TOTAL VALUE</th>
-                <th 
-                  onClick={() => handleSort('status')} 
-                  style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'status' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'status' ? 700 : 'normal' }}
-                >
-                  STATUS {sortBy === 'status' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
-                </th>
-                <th 
-                  onClick={() => handleSort('createdAt')} 
-                  style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'createdAt' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'createdAt' ? 700 : 'normal' }}
-                >
-                  DATE {sortBy === 'createdAt' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>Loading transactions...</td></tr>
-              ) : transactions.map((t, index) => {
-                const isExpanded = expandedTxId === t.id;
-                const prod = productMap[t.productId];
-                const unitPrice = prod?.price || 0;
-                const totalValue = Math.abs(t.quantity * unitPrice);
-
-                return (
-                  <React.Fragment key={t.id}>
-                    <tr 
-                      style={{ cursor: 'pointer', background: isExpanded ? 'var(--accent-light)' : 'transparent' }}
-                      onClick={() => setExpandedTxId(isExpanded ? null : t.id)}
-                    >
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        {(page - 1) * 10 + index + 1}
-                      </td>
-                      <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                      </td>
-                      <td>
-                        <span className={`badge ${
-                          t.type === 'INBOUND' ? 'badge-success' : 
-                          t.type === 'OUTBOUND' ? 'badge-danger' : 
-                          t.type === 'TRANSFER' ? 'badge-primary' : 'badge-warning'
-                        }`}>
-                          {t.type}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 600 }}>
-                        {prod ? prod.name : t.productId}
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginTop: '2px' }}>
-                          SKU: {prod ? prod.sku : t.productId}
-                        </div>
-                      </td>
-                      <td style={{ fontWeight: 700 }}>{t.quantity}</td>
-                      <td>
-                        {prod ? (
-                          <>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalValue)}
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(unitPrice)}/unit
-                            </div>
-                          </>
-                        ) : '-'}
-                      </td>
-                      <td>
-                        <span className="badge" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
-                          {t.status}
-                        </span>
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)' }}>{new Date(t.createdAt).toLocaleString()}</td>
-                    </tr>
-
-                    {/* Expandable Master-Detail Drawer Row */}
-                    {isExpanded && (
-                      <tr style={{ background: 'var(--bg-glass-hover)' }}>
-                        <td colSpan="8" style={{ padding: '1.2rem 2rem', borderBottom: '2px solid var(--accent-primary)' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.2rem', alignItems: 'center' }}>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                Transaction ID
-                              </div>
-                              <div style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)', marginTop: '0.2rem' }}>
-                                {t.id}
-                              </div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
-                                Created By: <b>{t.createdBy || 'System Admin'}</b>
-                              </div>
-                            </div>
-
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                Location Flow
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.3rem', fontSize: '0.9rem', fontWeight: 600 }}>
-                                <span>{t.locationFrom || 'SUPPLIER'}</span>
-                                <ArrowRight size={14} color="var(--accent-primary)" />
-                                <span>{t.locationTo || 'CUSTOMER'}</span>
-                              </div>
-                            </div>
-
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                Notes / Reason
-                              </div>
-                              <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '0.3rem', fontStyle: 'italic' }}>
-                                {t.note || 'No notes specified for this transaction.'}
-                              </div>
-                            </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                              <button 
-                                className="btn btn-outline"
-                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  alert(`Printing Dispatch Slip for Transaction:\nID: ${t.id}\nProduct: ${prod?.name}\nQty: ${t.quantity}\nDate: ${new Date(t.createdAt).toLocaleString()}`);
-                                }}
-                              >
-                                <FileText size={14} /> Print Slip
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-
-              {transactions.length === 0 && !loading && (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>No transactions found matching criteria</td></tr>
-              )}
-            </tbody>
-          </table>
-
-          {Math.ceil(total / 10) > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem', alignItems: 'center' }}>
-              <button 
-                className="btn btn-outline" 
-                disabled={page === 1} 
-                onClick={() => setPage(page - 1)}
-                style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-              >
-                Previous
-              </button>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                Page <strong>{page}</strong> of <strong>{Math.ceil(total / 10)}</strong>
-              </span>
-              <button 
-                className="btn btn-outline" 
-                disabled={page === Math.ceil(total / 10)} 
-                onClick={() => setPage(page + 1)}
-                style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Modal */}
+      {/* Grouped by type */}
+      <div className="glass-card" style={{ padding: '0.5rem' }}>
+        {TX_TYPES.map((t, idx) => {
+          const isOpen = !!expanded[t.key];
+          const group = groups[t.key] || {};
+          const count = counts[t.key] || 0;
+          const totalPages = Math.max(1, Math.ceil((group.total || 0) / PAGE_SIZE));
+
+          return (
+            <div key={t.key} style={{ borderBottom: idx < TX_TYPES.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+              <button
+                onClick={() => toggleGroup(t.key)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '1.1rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <t.Icon size={20} color="var(--text-secondary)" />
+                  <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{t.label}</span>
+                  <span className={`badge ${t.badge}`}>{countsLoading ? '...' : count}</span>
+                </div>
+                {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+              </button>
+
+              {isOpen && (
+                <div style={{ padding: '0 0.5rem 1.25rem' }}>
+                  {count === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
+                      No {t.label.toLowerCase()} transactions found matching criteria
+                    </div>
+                  ) : (
+                    <div className="table-container">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+                            <th style={{ width: '30px' }}></th>
+                            <th>PRODUCT</th>
+                            <th
+                              onClick={() => handleSort('quantity')}
+                              style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'quantity' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'quantity' ? 700 : 'normal' }}
+                            >
+                              QUANTITY {sortBy === 'quantity' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                            </th>
+                            <th>TOTAL VALUE</th>
+                            <th
+                              onClick={() => handleSort('status')}
+                              style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'status' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'status' ? 700 : 'normal' }}
+                            >
+                              STATUS {sortBy === 'status' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                            </th>
+                            <th
+                              onClick={() => handleSort('createdAt')}
+                              style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'createdAt' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'createdAt' ? 700 : 'normal' }}
+                            >
+                              DATE {sortBy === 'createdAt' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.loading ? (
+                            <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                          ) : (group.data || []).map((tx, index) => {
+                            const isExpanded = expandedTxId === tx.id;
+                            const prod = productMap[tx.productId];
+                            const unitPrice = prod?.price || 0;
+                            const totalValue = Math.abs(tx.quantity * unitPrice);
+
+                            return (
+                              <React.Fragment key={tx.id}>
+                                <tr
+                                  style={{ cursor: 'pointer', background: isExpanded ? 'var(--accent-light)' : 'transparent' }}
+                                  onClick={() => setExpandedTxId(isExpanded ? null : tx.id)}
+                                >
+                                  <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                    {((group.page || 1) - 1) * PAGE_SIZE + index + 1}
+                                  </td>
+                                  <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                  </td>
+                                  <td style={{ fontWeight: 600 }}>
+                                    {prod ? prod.name : tx.productId}
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginTop: '2px' }}>
+                                      SKU: {prod ? prod.sku : tx.productId}
+                                    </div>
+                                  </td>
+                                  <td style={{ fontWeight: 700 }}>{tx.quantity}</td>
+                                  <td>
+                                    {prod ? (
+                                      <>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{fmtVND(totalValue)}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{fmtVND(unitPrice)}/unit</div>
+                                      </>
+                                    ) : '-'}
+                                  </td>
+                                  <td>
+                                    <span className="badge" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
+                                      {tx.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ color: 'var(--text-secondary)' }}>{new Date(tx.createdAt).toLocaleString()}</td>
+                                </tr>
+
+                                {/* Expandable master-detail drawer */}
+                                {isExpanded && (
+                                  <tr style={{ background: 'var(--bg-glass-hover)' }}>
+                                    <td colSpan="7" style={{ padding: '1.2rem 2rem', borderBottom: '2px solid var(--accent-primary)' }}>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.2rem', alignItems: 'center' }}>
+                                        <div>
+                                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                            Transaction ID
+                                          </div>
+                                          <div style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)', marginTop: '0.2rem' }}>
+                                            {tx.id}
+                                          </div>
+                                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                                            Created By: <b>{tx.createdBy || 'System Admin'}</b>
+                                          </div>
+                                        </div>
+
+                                        <div>
+                                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                            Location Flow
+                                          </div>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.3rem', fontSize: '0.9rem', fontWeight: 600 }}>
+                                            <span>{tx.locationFrom || 'SUPPLIER'}</span>
+                                            <ArrowRight size={14} color="var(--accent-primary)" />
+                                            <span>{tx.locationTo || 'CUSTOMER'}</span>
+                                          </div>
+                                        </div>
+
+                                        <div>
+                                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                            Notes / Reason
+                                          </div>
+                                          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '0.3rem', fontStyle: 'italic' }}>
+                                            {tx.note || 'No notes specified for this transaction.'}
+                                          </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                          <button
+                                            className="btn btn-outline"
+                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              alert(`Printing Dispatch Slip for Transaction:\nID: ${tx.id}\nProduct: ${prod?.name}\nQty: ${tx.quantity}\nDate: ${new Date(tx.createdAt).toLocaleString()}`);
+                                            }}
+                                          >
+                                            <FileText size={14} /> Print Slip
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {totalPages > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem', alignItems: 'center' }}>
+                          <button
+                            className="btn btn-outline"
+                            disabled={(group.page || 1) === 1}
+                            onClick={() => fetchGroup(t.key, (group.page || 1) - 1)}
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                          >
+                            Previous
+                          </button>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                            Page <strong>{group.page || 1}</strong> of <strong>{totalPages}</strong>
+                          </span>
+                          <button
+                            className="btn btn-outline"
+                            disabled={(group.page || 1) === totalPages}
+                            onClick={() => fetchGroup(t.key, (group.page || 1) + 1)}
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal - rendered via portal so it always overlays the whole page regardless of scroll containers */}
       {showModal && ReactDOM.createPortal(
-        <div 
+        <div
           className="modal-backdrop"
           onClick={(e) => { if (e.target.classList.contains('modal-backdrop')) { setShowModal(false); setProductSearch(''); } }}
         >
@@ -610,13 +615,12 @@ const Transactions = () => {
             </p>
 
             <form onSubmit={handleCreateTransaction} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Product selection */}
               <div className="form-group">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Product</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="🔍 Type product name or SKU to filter..." 
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="🔍 Type product name or SKU to filter..."
                   value={productSearch}
                   onChange={e => {
                     const searchVal = e.target.value;
@@ -631,15 +635,15 @@ const Transactions = () => {
                   }}
                   style={{ marginBottom: '0.5rem' }}
                 />
-                <select 
+                <select
                   required
-                  className="form-input" 
-                  value={newTransaction.productId} 
+                  className="form-input"
+                  value={newTransaction.productId}
                   onChange={e => setNewTransaction({ ...newTransaction, productId: e.target.value })}
                 >
                   {filteredProductsForSelect.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.sku}) - {p.price ? p.price.toLocaleString() + ' VND' : ''}
+                      {p.name} ({p.sku}) {p.price ? `- ${p.price.toLocaleString()} VND` : ''}
                     </option>
                   ))}
                   {filteredProductsForSelect.length === 0 && (
@@ -648,12 +652,11 @@ const Transactions = () => {
                 </select>
               </div>
 
-              {/* Transaction Type */}
               <div className="form-group">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Transaction Type</label>
-                <select 
-                  className="form-input" 
-                  value={newTransaction.type} 
+                <select
+                  className="form-input"
+                  value={newTransaction.type}
                   onChange={e => setNewTransaction({ ...newTransaction, type: e.target.value })}
                 >
                   <option value="INBOUND">INBOUND (Import / Restock)</option>
@@ -663,9 +666,10 @@ const Transactions = () => {
                 </select>
               </div>
 
-              {/* Quantity */}
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Quantity</label>
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>
+                  Quantity
+                </label>
                 <input
                   required
                   type="number"
@@ -684,7 +688,6 @@ const Transactions = () => {
                 )}
               </div>
 
-              {/* Locations */}
               {newTransaction.type !== 'INBOUND' && newTransaction.type !== 'ADJUSTMENT' && (
                 <div className="form-group">
                   <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Location From</label>
@@ -701,35 +704,33 @@ const Transactions = () => {
               {newTransaction.type !== 'OUTBOUND' && (
                 <div className="form-group">
                   <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Location To</label>
-                  <input 
+                  <input
                     required
-                    type="text" 
-                    className="form-input" 
-                    value={newTransaction.locationTo} 
+                    type="text"
+                    className="form-input"
+                    value={newTransaction.locationTo}
                     onChange={e => setNewTransaction({ ...newTransaction, locationTo: e.target.value })}
                   />
                 </div>
               )}
 
-              {/* Note */}
               <div className="form-group">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Note / Remarks</label>
-                <textarea 
-                  className="form-input" 
+                <textarea
+                  className="form-input"
                   rows="3"
                   placeholder="Specify reason, invoice number, or details..."
-                  value={newTransaction.note} 
+                  value={newTransaction.note}
                   onChange={e => setNewTransaction({ ...newTransaction, note: e.target.value })}
                   style={{ resize: 'none', fontFamily: 'inherit' }}
                 />
               </div>
 
-              {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
-                <button 
-                  type="button" 
-                  className="btn btn-outline" 
-                  style={{ background: 'var(--bg-glass)' }} 
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ background: 'var(--bg-glass)' }}
                   onClick={() => { setShowModal(false); setProductSearch(''); }}
                 >
                   Cancel
