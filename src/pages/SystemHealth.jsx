@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client';
-import { Server, Database, Cpu, Box, Radio, RefreshCw, CheckCircle2, XCircle, Activity } from 'lucide-react';
+import { Server, Database, Cpu, Box, Radio, RefreshCw, CheckCircle2, XCircle, Activity, ExternalLink, RotateCcw, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 const CATEGORY_META = {
   gateway: { label: 'API Gateway', icon: Radio },
@@ -12,20 +12,20 @@ const CATEGORY_META = {
 
 const SystemHealth = () => {
   const [data, setData] = useState(null);
+  const [busData, setBusData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  const [mbData, setMbData] = useState(null);
+  const [actionMessage, setActionMessage] = useState('');
 
   const fetchHealth = async () => {
     try {
       setError('');
-      const [resHealth, resMb] = await Promise.all([
+      const [healthRes, busRes] = await Promise.all([
         apiClient.get('/system/health'),
         apiClient.get('/system/message-bus/status').catch(() => null),
       ]);
-      setData(resHealth.data);
-      if (resMb) setMbData(resMb.data);
+      setData(healthRes.data);
+      if (busRes?.data) setBusData(busRes.data);
     } catch (err) {
       console.error('Failed to fetch system health:', err);
       setError(err.response?.data?.message || 'Could not load system health.');
@@ -36,28 +36,55 @@ const SystemHealth = () => {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 10000); // Auto refresh mỗi 10s
+    const interval = setInterval(fetchHealth, 8000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleRequeueDlq = async (dlqName, targetQueue) => {
+    try {
+      setActionMessage(`Requeuing messages from ${dlqName}...`);
+      const res = await apiClient.post('/system/message-bus/requeue-dlq', { dlqName, targetQueue });
+      alert(res.data.message);
+      fetchHealth();
+    } catch (err) {
+      alert('Error requeuing DLQ: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setActionMessage('');
+    }
+  };
+
+  const handlePurgeQueue = async (queueName) => {
+    if (!window.confirm(`Are you sure you want to purge all pending messages in queue [${queueName}]?`)) return;
+    try {
+      setActionMessage(`Purging queue ${queueName}...`);
+      const res = await apiClient.post('/system/message-bus/purge-queue', { queueName });
+      alert(res.data.message);
+      fetchHealth();
+    } catch (err) {
+      alert('Error purging queue: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setActionMessage('');
+    }
+  };
 
   const summary = data?.summary;
   const allHealthy = summary && summary.down === 0;
 
   return (
-    <div className="animate-slide-up">
+    <div className="animate-slide-up" style={{ paddingBottom: '3rem' }}>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Activity size={28} color="var(--accent-primary)" />
-          <h1 className="text-title" style={{ marginBottom: 0 }}>System Monitoring</h1>
+          <h1 className="text-title" style={{ marginBottom: 0 }}>System Monitoring & Message Bus Control</h1>
         </div>
         <button className="btn btn-outline" onClick={fetchHealth} style={{ background: 'var(--bg-glass)' }}>
-          <RefreshCw size={16} /> Refresh
+          <RefreshCw size={16} /> Refresh Status
         </button>
       </div>
 
       {loading ? (
         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-          Checking services...
+          Checking all microservices & RabbitMQ message queues...
         </div>
       ) : error ? (
         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--danger)', padding: '2rem' }}>
@@ -65,11 +92,11 @@ const SystemHealth = () => {
         </div>
       ) : (
         <>
-          {/* Summary cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+          {/* Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
             <div className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Overall Status</p>
+                <p className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Overall System</p>
                 <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: allHealthy ? 'var(--success)' : 'var(--danger)' }}>
                   {allHealthy ? 'Operational' : 'Degraded'}
                 </h3>
@@ -98,8 +125,9 @@ const SystemHealth = () => {
             </div>
           </div>
 
-          {/* Service cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+          {/* Microservices Grid */}
+          <h2 className="text-title" style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Infrastructure Services Status</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
             {data.services.map((svc) => {
               const meta = CATEGORY_META[svc.category] || CATEGORY_META.microservice;
               const Icon = meta.icon;
@@ -137,63 +165,125 @@ const SystemHealth = () => {
             })}
           </div>
 
-          {/* Message Bus Resilience & DLQ Status */}
-          {mbData && (
-            <div className="glass-card" style={{ marginBottom: '2rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                <Box size={22} color="var(--accent-primary)" />
-                <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Message Bus Resilience & Dead Letter Queues (DLQ)</h3>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-                <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Broker Status</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: mbData.broker.status === 'HEALTHY' ? 'var(--success)' : 'var(--danger)' }}>
-                    {mbData.broker.status} ({mbData.broker.latencyMs || 0} ms)
-                  </div>
+          {/* Message Bus Error Management Section */}
+          <div className="glass-card" style={{ padding: '1.5rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Box size={22} color="var(--accent-primary)" />
+                  <h3 className="text-title" style={{ fontSize: '1.3rem', margin: 0 }}>Message Bus & Error Recovery Management</h3>
                 </div>
-                <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Dead Letter Exchange</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                    {mbData.resilienceStrategy.dlxExchange}
-                  </div>
-                </div>
-                <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Auto-Reconnect Strategy</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--success)' }}>
-                    Enabled (Every {mbData.resilienceStrategy.reconnectIntervalSec}s)
-                  </div>
-                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                  Quản lý hàng đợi RabbitMQ, theo dõi lỗi Dead Letter Queue (DLQ) & khôi phục tin nhắn sự cố.
+                </p>
               </div>
 
-              <h4 style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Monitored Queues & Associated DLQs</h4>
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Active Message Queue</th>
-                      <th>Dead Letter Queue (DLQ)</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mbData.monitoredQueues.map((q) => (
+              <a
+                href="http://localhost:15672"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-outline"
+                style={{ background: 'var(--bg-glass)', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <ExternalLink size={16} /> Open RabbitMQ UI (Port 15672)
+              </a>
+            </div>
+
+            {actionMessage && (
+              <div style={{ padding: '0.75rem 1rem', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-primary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                {actionMessage}
+              </div>
+            )}
+
+            {/* Queues & DLQ Table */}
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Service Name</th>
+                    <th>Message Queue</th>
+                    <th>Consumers Active</th>
+                    <th>Pending Messages</th>
+                    <th>DLQ Errors (Dead Letter)</th>
+                    <th>Queue Status</th>
+                    <th style={{ textAlign: 'center' }}>Error Management Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {busData?.monitoredQueues?.map((q) => {
+                    const hasErrors = q.dlqErrorCount > 0;
+                    const isOnline = q.consumers > 0;
+
+                    return (
                       <tr key={q.queue}>
-                        <td><code style={{ color: 'var(--accent-primary)' }}>{q.queue}</code></td>
-                        <td><code style={{ color: 'var(--warning)' }}>{q.deadLetterQueue}</code></td>
+                        <td style={{ fontWeight: 600 }}>{q.service}</td>
                         <td>
-                          <span className="badge badge-success">{q.status}</span>
+                          <code style={{ background: 'var(--bg-primary)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem' }}>{q.queue}</code>
+                        </td>
+                        <td>
+                          <span className={`badge ${isOnline ? 'badge-success' : 'badge-warning'}`}>
+                            {q.consumers} Active {q.consumers === 1 ? 'Consumer' : 'Consumers'}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 700 }}>{q.pendingMessages}</td>
+                        <td>
+                          {hasErrors ? (
+                            <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <AlertTriangle size={14} /> {q.dlqErrorCount} Error Messages
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>0 Errors (Clean)</span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className="badge"
+                            style={{
+                              background: hasErrors ? 'var(--danger-light)' : isOnline ? 'var(--success-light)' : 'var(--warning-light)',
+                              color: hasErrors ? 'var(--danger)' : isOnline ? 'var(--success)' : 'var(--warning)',
+                            }}
+                          >
+                            {hasErrors ? 'HAS ERRORS' : isOnline ? 'ACTIVE' : 'NO CONSUMER'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                            <button
+                              className="btn btn-outline"
+                              onClick={() => handleRequeueDlq(q.deadLetterQueue, q.queue)}
+                              disabled={!hasErrors}
+                              title="Thử lại toàn bộ tin nhắn lỗi trong Dead Letter Queue"
+                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', opacity: hasErrors ? 1 : 0.4 }}
+                            >
+                              <RotateCcw size={14} /> Replay DLQ
+                            </button>
+
+                            <button
+                              className="btn btn-outline"
+                              onClick={() => handlePurgeQueue(q.deadLetterQueue)}
+                              disabled={!hasErrors}
+                              title="Xóa dọn dẹp Hàng đợi thư chết"
+                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', color: 'var(--danger)', opacity: hasErrors ? 1 : 0.4 }}
+                            >
+                              <Trash2 size={14} /> Clear DLQ
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
 
-          <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '1.5rem' }}>
-            Last checked: {new Date(data.checkedAt).toLocaleTimeString()} · Auto-refreshes every 10s
-          </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <ShieldCheck size={16} color="var(--success)" />
+                <span>Dead Letter Exchange: <code>amq.direct</code> | Auto-Reconnect: Enabled (5s)</span>
+              </div>
+              <span>Last checked: {new Date().toLocaleTimeString()} · Auto-refreshes every 8s</span>
+            </div>
+          </div>
         </>
       )}
     </div>
