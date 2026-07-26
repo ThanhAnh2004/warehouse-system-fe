@@ -15,11 +15,17 @@ const SystemHealth = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [mbData, setMbData] = useState(null);
+
   const fetchHealth = async () => {
     try {
       setError('');
-      const res = await apiClient.get('/system/health');
-      setData(res.data);
+      const [resHealth, resMb] = await Promise.all([
+        apiClient.get('/system/health'),
+        apiClient.get('/system/message-bus/status').catch(() => null),
+      ]);
+      setData(resHealth.data);
+      if (resMb) setMbData(resMb.data);
     } catch (err) {
       console.error('Failed to fetch system health:', err);
       setError(err.response?.data?.message || 'Could not load system health.');
@@ -93,7 +99,7 @@ const SystemHealth = () => {
           </div>
 
           {/* Service cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
             {data.services.map((svc) => {
               const meta = CATEGORY_META[svc.category] || CATEGORY_META.microservice;
               const Icon = meta.icon;
@@ -130,6 +136,60 @@ const SystemHealth = () => {
               );
             })}
           </div>
+
+          {/* Message Bus Resilience & DLQ Status */}
+          {mbData && (
+            <div className="glass-card" style={{ marginBottom: '2rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                <Box size={22} color="var(--accent-primary)" />
+                <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Message Bus Resilience & Dead Letter Queues (DLQ)</h3>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Broker Status</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: mbData.broker.status === 'HEALTHY' ? 'var(--success)' : 'var(--danger)' }}>
+                    {mbData.broker.status} ({mbData.broker.latencyMs || 0} ms)
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Dead Letter Exchange</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                    {mbData.resilienceStrategy.dlxExchange}
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Auto-Reconnect Strategy</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--success)' }}>
+                    Enabled (Every {mbData.resilienceStrategy.reconnectIntervalSec}s)
+                  </div>
+                </div>
+              </div>
+
+              <h4 style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Monitored Queues & Associated DLQs</h4>
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Active Message Queue</th>
+                      <th>Dead Letter Queue (DLQ)</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mbData.monitoredQueues.map((q) => (
+                      <tr key={q.queue}>
+                        <td><code style={{ color: 'var(--accent-primary)' }}>{q.queue}</code></td>
+                        <td><code style={{ color: 'var(--warning)' }}>{q.deadLetterQueue}</code></td>
+                        <td>
+                          <span className="badge badge-success">{q.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '1.5rem' }}>
             Last checked: {new Date(data.checkedAt).toLocaleTimeString()} · Auto-refreshes every 10s
