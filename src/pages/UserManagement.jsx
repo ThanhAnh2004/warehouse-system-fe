@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import apiClient from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-import { Plus, Users, Search, Edit, Trash2, Key } from 'lucide-react';
+import { Plus, Users, Search, Edit, Trash2, Key, Eye, EyeOff } from 'lucide-react';
 
 const UserManagement = () => {
   const { user } = useContext(AuthContext);
@@ -11,6 +11,7 @@ const UserManagement = () => {
   const [showModal, setShowModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
   
   // Custom permissions states
   const [systemPermissions, setSystemPermissions] = useState([]);
@@ -63,6 +64,7 @@ const UserManagement = () => {
     setEditingUserId(null);
     setIsCustomPermissions(false);
     setUserPermissions([]);
+    setShowPassword(false);
     setNewUser({
       email: '', password: '', fullname: '', role: 'Staff', address: '', phone: '', gender: 'Male'
     });
@@ -72,6 +74,7 @@ const UserManagement = () => {
   const openEditModal = (u) => {
     setIsEditMode(true);
     setEditingUserId(u._id);
+    setShowPassword(false);
     setNewUser({
       email: u.email,
       password: '',
@@ -189,6 +192,7 @@ const UserManagement = () => {
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ width: '45px', textAlign: 'center' }}>#</th>
                 <th>Email</th>
                 <th>Fullname</th>
                 <th>Role</th>
@@ -200,9 +204,10 @@ const UserManagement = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="7" style={{ padding: '2rem', textAlign: 'center' }}>Loading users...</td></tr>
-              ) : filteredUsers.map(u => (
+                <tr><td colSpan="8" style={{ padding: '2rem', textAlign: 'center' }}>Loading users...</td></tr>
+              ) : filteredUsers.map((u, idx) => (
                 <tr key={u._id}>
+                  <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
                   <td><strong>{u.email}</strong></td>
                   <td style={{ fontWeight: 600 }}>{u.fullname}</td>
                   <td>
@@ -245,15 +250,59 @@ const UserManagement = () => {
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 className="text-title" style={{ fontSize: '1.5rem' }}>{isEditMode ? 'Edit User' : 'Add New User'}</h3>
-            <form onSubmit={handleSubmit} style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleSubmit} autoComplete="off" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Dummy hidden inputs to prevent Chrome / Edge password manager aggressive autofill */}
+              <input type="text" name="fake_email_prevent_autofill" style={{ display: 'none' }} tabIndex="-1" />
+              <input type="password" name="fake_password_prevent_autofill" style={{ display: 'none' }} tabIndex="-1" />
+
               <div className="form-group mb-4">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Email</label>
-                <input required type="email" disabled={isEditMode} className="form-input" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
+                <input 
+                  required 
+                  type="email" 
+                  name="user_email_field"
+                  autoComplete="off" 
+                  disabled={isEditMode} 
+                  className="form-input" 
+                  value={newUser.email} 
+                  onChange={e => setNewUser({...newUser, email: e.target.value})} 
+                />
               </div>
               {!isEditMode && (
                 <div className="form-group mb-4">
                   <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Password</label>
-                  <input required type="password" className="form-input" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input 
+                      required 
+                      type={showPassword ? 'text' : 'password'} 
+                      name="user_password_field"
+                      autoComplete="new-password"
+                      className="form-input" 
+                      style={{ paddingRight: '2.5rem', width: '100%' }}
+                      value={newUser.password} 
+                      onChange={e => setNewUser({...newUser, password: e.target.value})} 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '0.75rem',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '0.2rem',
+                        transition: 'color 0.2s'
+                      }}
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
               )}
               <div className="form-group mb-4">
