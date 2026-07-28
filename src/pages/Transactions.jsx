@@ -3,16 +3,16 @@ import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
 import {
   Plus, Search, Download, Calendar, ChevronDown, ChevronUp, ChevronRight,
-  FileText, ArrowRight, ArrowDownCircle, ArrowUpCircle, Repeat, SlidersHorizontal,
+  FileText, ArrowRight, ArrowDownCircle, ArrowUpCircle, Repeat, SlidersHorizontal, Info
 } from 'lucide-react';
 
 const PAGE_SIZE = 10;
 
 const TX_TYPES = [
-  { key: 'INBOUND', label: 'Inbound', badge: 'badge-success', Icon: ArrowDownCircle },
-  { key: 'OUTBOUND', label: 'Outbound', badge: 'badge-danger', Icon: ArrowUpCircle },
-  { key: 'TRANSFER', label: 'Transfer', badge: 'badge-primary', Icon: Repeat },
-  { key: 'ADJUSTMENT', label: 'Adjustment', badge: 'badge-warning', Icon: SlidersHorizontal },
+  { key: 'INBOUND', label: 'Nhập Kho (Inbound)', badge: 'badge-success', Icon: ArrowDownCircle },
+  { key: 'OUTBOUND', label: 'Xuất Kho (Outbound)', badge: 'badge-danger', Icon: ArrowUpCircle },
+  { key: 'TRANSFER', label: 'Điều Chuyển Kệ (Transfer)', badge: 'badge-primary', Icon: Repeat },
+  { key: 'ADJUSTMENT', label: 'Kiểm Kê / Điều Chỉnh (Adjustment)', badge: 'badge-warning', Icon: SlidersHorizontal },
 ];
 
 const fmtVND = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n || 0);
@@ -20,6 +20,7 @@ const fmtVND = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', curren
 const Transactions = () => {
   const [productMap, setProductMap] = useState({});
   const [products, setProducts] = useState([]);
+  const [warehouseLocations, setWarehouseLocations] = useState([]);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('DESC');
@@ -32,20 +33,74 @@ const Transactions = () => {
   const [productSearch, setProductSearch] = useState('');
   const [newTransaction, setNewTransaction] = useState({
     productId: '',
-    type: 'INBOUND',
+    type: 'OUTBOUND',
     quantity: 1,
-    locationFrom: 'DEFAULT_WAREHOUSE',
-    locationTo: 'DEFAULT_WAREHOUSE',
+    locationFrom: '',
+    locationTo: '',
     note: ''
   });
 
-  // Số lượng giao dịch theo từng loại (badge trên header mỗi nhóm)
   const [counts, setCounts] = useState({});
   const [countsLoading, setCountsLoading] = useState(true);
 
-  // Nhóm nào đang mở, và dữ liệu/phân trang riêng của từng nhóm
   const [expanded, setExpanded] = useState({});
   const [groups, setGroups] = useState({});
+
+  useEffect(() => {
+    fetchProducts();
+    fetchLocations();
+  }, []);
+
+  const fetchLocations = async () => {
+    try {
+      const res = await apiClient.get('/inventory/locations');
+      setWarehouseLocations(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch locations:', err);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const prodRes = await apiClient.get('/inventory/products?limit=1000');
+      const map = {};
+      const list = prodRes.data?.data || [];
+      list.forEach(p => {
+        map[p.id] = { name: p.name, sku: p.sku, price: parseFloat(p.price) || 0 };
+      });
+      setProductMap(map);
+      setProducts(list);
+      if (list.length > 0) {
+        setNewTransaction(prev => ({ ...prev, productId: list[0].id }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Find locations containing the selected product for OUTBOUND / TRANSFER
+  const getProductLocations = (productId) => {
+    if (!productId) return [];
+    return warehouseLocations.filter(loc =>
+      loc.items?.some(it => it.productId === productId && it.quantity > 0)
+    );
+  };
+
+  const productRacks = getProductLocations(newTransaction.productId);
+
+  // Auto-set locationFrom when product or type changes
+  useEffect(() => {
+    if (newTransaction.type === 'OUTBOUND' || newTransaction.type === 'TRANSFER') {
+      if (productRacks.length > 0) {
+        const hasCurrent = productRacks.some(r => r.code === newTransaction.locationFrom);
+        if (!hasCurrent) {
+          setNewTransaction(prev => ({ ...prev, locationFrom: productRacks[0].code }));
+        }
+      } else {
+        setNewTransaction(prev => ({ ...prev, locationFrom: '' }));
+      }
+    }
+  }, [newTransaction.productId, newTransaction.type, warehouseLocations]);
 
   const handleDatePresetChange = (preset) => {
     setDatePreset(preset);
@@ -79,20 +134,20 @@ const Transactions = () => {
       });
       const list = res.data?.data || [];
       if (list.length === 0) {
-        alert('No transactions found to export.');
+        alert('Không tìm thấy giao dịch nào để xuất CSV.');
         return;
       }
 
-      const headers = ['Transaction ID', 'Type', 'Product Name', 'SKU', 'Quantity', 'Unit Price (VND)', 'Total Value (VND)', 'Status', 'Date', 'Note'];
+      const headers = ['Mã Giao Dịch', 'Loại Giao Dịch', 'Tên Sản Phẩm', 'Mã SKU', 'Số Lượng', 'Đơn Giá (VNĐ)', 'Tổng Giá Trị (VNĐ)', 'Trạng Thái', 'Thời Gian', 'Ghi Chú'];
       const rows = list.map(t => {
         const prod = productMap[t.productId];
         const unitPrice = prod?.price || 0;
         const totalVal = Math.abs(t.quantity * unitPrice);
-        const dateStr = new Date(t.createdAt).toLocaleString();
+        const dateStr = new Date(t.createdAt).toLocaleString('vi-VN');
         return [
           `"${t.id}"`,
           `"${t.type}"`,
-          `"${(prod?.name || 'Unknown').replace(/"/g, '""')}"`,
+          `"${(prod?.name || 'Không xác định').replace(/"/g, '""')}"`,
           `"${(prod?.sku || '').replace(/"/g, '""')}"`,
           t.quantity,
           unitPrice,
@@ -107,19 +162,29 @@ const Transactions = () => {
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement('a');
       link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `Warehouse_Transactions_Report_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `Bao_Cao_Giao_Dich_Kho_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (err) {
-      alert('Failed to export CSV: ' + err.message);
+      alert('Xuất file CSV thất bại: ' + err.message);
     }
   };
 
   const handleOpenModal = () => {
     setProductSearch('');
+    fetchLocations();
     if (products.length > 0) {
-      setNewTransaction(prev => ({ ...prev, productId: products[0].id }));
+      const firstProdId = products[0].id;
+      const racks = getProductLocations(firstProdId);
+      setNewTransaction({
+        productId: firstProdId,
+        type: 'OUTBOUND',
+        quantity: 1,
+        locationFrom: racks.length > 0 ? racks[0].code : '',
+        locationTo: '',
+        note: ''
+      });
     }
     setShowModal(true);
   };
@@ -129,29 +194,6 @@ const Transactions = () => {
     p.sku?.toLowerCase().includes(productSearch.toLowerCase())
   );
 
-  // Fetch products once on mount
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const prodRes = await apiClient.get('/inventory/products?limit=1000');
-        const map = {};
-        const list = prodRes.data?.data || [];
-        list.forEach(p => {
-          map[p.id] = { name: p.name, sku: p.sku, price: parseFloat(p.price) || 0 };
-        });
-        setProductMap(map);
-        setProducts(list);
-        if (list.length > 0) {
-          setNewTransaction(prev => ({ ...prev, productId: list[0].id }));
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchProducts();
-  }, []);
-
-  // Đếm số giao dịch theo từng loại - phục vụ hiển thị badge trên mỗi nhóm
   useEffect(() => {
     const fetchCounts = async () => {
       setCountsLoading(true);
@@ -195,7 +237,6 @@ const Transactions = () => {
     if (willExpand) fetchGroup(type, 1);
   };
 
-  // Khi search/sort/khoảng ngày đổi hoặc có giao dịch mới, làm mới các nhóm đang mở (về trang 1)
   useEffect(() => {
     Object.keys(expanded).forEach(type => {
       if (expanded[type]) fetchGroup(type, 1);
@@ -206,15 +247,22 @@ const Transactions = () => {
     e.preventDefault();
     try {
       const qty = parseInt(newTransaction.quantity, 10);
-      // ADJUSTMENT cho phep so luong am (giam ton kho thuc te), cac loai con lai phai duong.
       if (isNaN(qty) || (newTransaction.type === 'ADJUSTMENT' ? qty === 0 : qty <= 0)) {
         alert(
           newTransaction.type === 'ADJUSTMENT'
-            ? 'Please enter a non-zero quantity (negative to reduce stock).'
-            : 'Please enter a valid quantity greater than 0'
+            ? 'Vui lòng nhập số lượng khác 0 (Số âm để giảm tồn kho do hỏng hóc).'
+            : 'Vui lòng nhập số lượng hợp lệ lớn hơn 0.'
         );
         return;
       }
+
+      if (newTransaction.type === 'OUTBOUND') {
+        if (!newTransaction.locationFrom) {
+          alert('Vui lòng chọn Kệ Kho cần xuất hàng!');
+          return;
+        }
+      }
+
       const payload = {
         productId: newTransaction.productId,
         type: newTransaction.type,
@@ -223,35 +271,26 @@ const Transactions = () => {
       };
 
       if (newTransaction.type === 'INBOUND') {
-        payload.locationTo = newTransaction.locationTo;
+        payload.locationTo = 'DEFAULT_WAREHOUSE';
       } else if (newTransaction.type === 'OUTBOUND') {
         payload.locationFrom = newTransaction.locationFrom;
       } else if (newTransaction.type === 'TRANSFER') {
         payload.locationFrom = newTransaction.locationFrom;
         payload.locationTo = newTransaction.locationTo;
       } else if (newTransaction.type === 'ADJUSTMENT') {
-        // Backend chi yeu cau locationFrom HOAC locationTo - dung locationTo (kho dang dieu chinh).
-        payload.locationTo = newTransaction.locationTo;
+        payload.locationTo = newTransaction.locationFrom || 'DEFAULT_WAREHOUSE';
       }
 
       await apiClient.post('/transactions', payload);
+      alert('Tạo giao dịch thành công!');
       setShowModal(false);
       setProductSearch('');
 
-      setNewTransaction({
-        productId: products.length > 0 ? products[0].id : '',
-        type: 'INBOUND',
-        quantity: 1,
-        locationFrom: 'DEFAULT_WAREHOUSE',
-        locationTo: 'DEFAULT_WAREHOUSE',
-        note: ''
-      });
-
-      // Mở luôn nhóm vừa tạo giao dịch để người dùng thấy ngay kết quả
-      setExpanded(prev => ({ ...prev, [payload.type]: true }));
       setRefreshKey(prev => prev + 1);
+      fetchLocations();
+      setExpanded(prev => ({ ...prev, [payload.type]: true }));
     } catch (err) {
-      alert('Error creating transaction: ' + (err.response?.data?.message || err.message));
+      alert('Lỗi tạo giao dịch: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -267,21 +306,21 @@ const Transactions = () => {
   const totalAllTypes = TX_TYPES.reduce((sum, t) => sum + (counts[t.key] || 0), 0);
 
   return (
-    <div className="animate-slide-up">
+    <div className="animate-slide-up" style={{ paddingBottom: '3rem' }}>
       {/* Header */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 className="text-title" style={{ margin: 0 }}>Transactions History</h2>
+          <h2 className="text-title" style={{ margin: 0 }}>Lịch Sử Giao Dịch Kho Hàng</h2>
           <p className="text-subtitle" style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>
-            Grouped by type - click a group to see its detailed audit log
+            Phân loại theo nhóm giao dịch Nhập - Xuất - Chuyển kệ - Điều chỉnh kiểm kê.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button className="btn btn-outline" onClick={handleExportCSV} style={{ background: 'var(--bg-glass)' }}>
-            <Download size={18} /> Export CSV
+            <Download size={18} /> Xuất Báo Cáo CSV
           </button>
           <button className="btn btn-primary" onClick={handleOpenModal}>
-            <Plus size={18} /> New Transaction
+            <Plus size={18} /> Tạo Giao Dịch Mới
           </button>
         </div>
       </div>
@@ -290,122 +329,79 @@ const Transactions = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
         <div className="glass-card" style={{ padding: '1.2rem' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
-            Total Filtered Records
+            Tổng Số Giao Dịch
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.4rem' }}>
             {countsLoading ? '...' : totalAllTypes.toLocaleString()}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-            Transactions matched
+            Khớp với bộ lọc
           </div>
         </div>
 
         <div className="glass-card" style={{ padding: '1.2rem', borderLeft: '4px solid var(--accent-primary)' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
-            Active Date Scope
+            Phạm Vi Thời Gian
           </div>
           <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-primary)', marginTop: '0.4rem' }}>
-            {datePreset === 'ALL' ? 'All Time History' : datePreset === 'CUSTOM' ? 'Custom Range' : datePreset}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-            {startDate ? `${startDate} ~ ${endDate}` : 'No date restriction'}
+            {datePreset === 'ALL' ? 'Toàn bộ lịch sử' : datePreset === 'CUSTOM' ? 'Tùy chọn khoảng ngày' : datePreset}
           </div>
         </div>
       </div>
 
-      {/* Toolbar & Filters */}
-      <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.5rem' }}>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: '1rem', flex: 1, flexWrap: 'wrap', alignItems: 'center', maxWidth: '700px' }}>
-              <div className="search-box" style={{ flex: 1, minWidth: '220px' }}>
-                <Search size={18} color="var(--text-secondary)" />
-                <input
-                  type="text"
-                  placeholder="Search by product, SKU, note..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                />
-              </div>
-
-              {/* Date Preset Filter */}
-              <select
-                className="form-input"
-                value={datePreset}
-                onChange={e => handleDatePresetChange(e.target.value)}
-                style={{ width: 'auto', minWidth: '130px', cursor: 'pointer' }}
-              >
-                <option value="ALL">All Time</option>
-                <option value="TODAY">Today</option>
-                <option value="7DAYS">Last 7 Days</option>
-                <option value="30DAYS">Last 30 Days</option>
-                <option value="MONTH">This Month</option>
-              </select>
-
-              {/* Sort Control Dropdown */}
-              <select
-                className="form-input"
-                value={`${sortBy}:${sortOrder}`}
-                onChange={e => {
-                  const [field, order] = e.target.value.split(':');
-                  setSortBy(field);
-                  setSortOrder(order);
-                }}
-                style={{ width: 'auto', minWidth: '170px', cursor: 'pointer' }}
-              >
-                <option value="createdAt:DESC">Date (Newest First)</option>
-                <option value="createdAt:ASC">Date (Oldest First)</option>
-                <option value="quantity:DESC">Quantity (High to Low)</option>
-                <option value="quantity:ASC">Quantity (Low to High)</option>
-                <option value="status:ASC">Status (A-Z)</option>
-              </select>
-            </div>
-
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>
-              Total: {countsLoading ? '...' : totalAllTypes} transactions
-            </div>
+      {/* Filter Toolbar */}
+      <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="search-box" style={{ flex: 1, minWidth: '240px' }}>
+            <Search size={18} color="var(--text-secondary)" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm giao dịch theo tên, SKU, ghi chú..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
 
-          {/* Date Picker Custom Inputs Row */}
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', paddingTop: '0.5rem', borderTop: '1px dashed var(--border-color)' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Calendar size={15} /> Date Range:
-            </span>
-            <input
-              type="date"
-              className="form-input"
-              value={startDate}
-              onChange={e => { setStartDate(e.target.value); setDatePreset('CUSTOM'); }}
-              style={{ width: 'auto', padding: '0.5rem 0.8rem', fontSize: '0.85rem' }}
-            />
-            <span style={{ color: 'var(--text-secondary)' }}>to</span>
-            <input
-              type="date"
-              className="form-input"
-              value={endDate}
-              onChange={e => { setEndDate(e.target.value); setDatePreset('CUSTOM'); }}
-              style={{ width: 'auto', padding: '0.5rem 0.8rem', fontSize: '0.85rem' }}
-            />
-            {(startDate || endDate) && (
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => handleDatePresetChange('ALL')}
-                style={{ padding: '0.3rem 0.7rem', fontSize: '0.8rem' }}
-              >
-                Clear Range
-              </button>
-            )}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <Calendar size={18} color="var(--text-secondary)" />
+            <button
+              className={`btn ${datePreset === 'ALL' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => handleDatePresetChange('ALL')}
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}
+            >
+              Tất cả
+            </button>
+            <button
+              className={`btn ${datePreset === 'TODAY' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => handleDatePresetChange('TODAY')}
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}
+            >
+              Hôm nay
+            </button>
+            <button
+              className={`btn ${datePreset === '7DAYS' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => handleDatePresetChange('7DAYS')}
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}
+            >
+              7 ngày
+            </button>
+            <button
+              className={`btn ${datePreset === '30DAYS' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => handleDatePresetChange('30DAYS')}
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}
+            >
+              30 ngày
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Grouped by type */}
+      {/* Accordion Transaction Groups */}
       <div className="glass-card" style={{ padding: '0.5rem' }}>
         {TX_TYPES.map((t, idx) => {
           const isOpen = !!expanded[t.key];
-          const group = groups[t.key] || {};
           const count = counts[t.key] || 0;
+          const group = groups[t.key] || { data: [], total: 0, page: 1, loading: false };
           const totalPages = Math.max(1, Math.ceil((group.total || 0) / PAGE_SIZE));
 
           return (
@@ -436,40 +432,40 @@ const Transactions = () => {
                 <div style={{ padding: '0 0.5rem 1.25rem' }}>
                   {count === 0 ? (
                     <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
-                      No {t.label.toLowerCase()} transactions found matching criteria
+                      Không có giao dịch {t.label.toLowerCase()} nào phù hợp với bộ lọc
                     </div>
                   ) : (
                     <div className="table-container">
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+                            <th style={{ width: '45px', textAlign: 'center' }}>STT</th>
                             <th style={{ width: '30px' }}></th>
-                            <th>PRODUCT</th>
+                            <th>SẢN PHẨM</th>
                             <th
                               onClick={() => handleSort('quantity')}
                               style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'quantity' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'quantity' ? 700 : 'normal' }}
                             >
-                              QUANTITY {sortBy === 'quantity' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                              SỐ LƯỢNG {sortBy === 'quantity' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                             </th>
-                            <th>TOTAL VALUE</th>
+                            <th>TỔNG GIÁ TRỊ</th>
                             <th
                               onClick={() => handleSort('status')}
                               style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'status' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'status' ? 700 : 'normal' }}
                             >
-                              STATUS {sortBy === 'status' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                              TRẠNG THÁI {sortBy === 'status' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                             </th>
                             <th
                               onClick={() => handleSort('createdAt')}
                               style={{ cursor: 'pointer', userSelect: 'none', color: sortBy === 'createdAt' ? 'var(--accent-primary)' : 'inherit', fontWeight: sortBy === 'createdAt' ? 700 : 'normal' }}
                             >
-                              DATE {sortBy === 'createdAt' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                              THỜI GIAN {sortBy === 'createdAt' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                             </th>
                           </tr>
                         </thead>
                         <tbody>
                           {group.loading ? (
-                            <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                            <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Đang tải...</td></tr>
                           ) : (group.data || []).map((tx, index) => {
                             const isExpanded = expandedTxId === tx.id;
                             const prod = productMap[tx.productId];
@@ -499,52 +495,59 @@ const Transactions = () => {
                                     {prod ? (
                                       <>
                                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{fmtVND(totalValue)}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{fmtVND(unitPrice)}/unit</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{fmtVND(unitPrice)}/món</div>
                                       </>
                                     ) : '-'}
                                   </td>
                                   <td>
-                                    <span className="badge" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
-                                      {tx.status}
+                                    <span className="badge badge-success">
+                                      {tx.status === 'COMPLETED' ? 'HOÀN THÀNH' : tx.status}
                                     </span>
                                   </td>
-                                  <td style={{ color: 'var(--text-secondary)' }}>{new Date(tx.createdAt).toLocaleString()}</td>
+                                  <td style={{ color: 'var(--text-secondary)' }}>{new Date(tx.createdAt).toLocaleString('vi-VN')}</td>
                                 </tr>
 
-                                {/* Expandable master-detail drawer */}
                                 {isExpanded && (
                                   <tr style={{ background: 'var(--bg-glass-hover)' }}>
                                     <td colSpan="7" style={{ padding: '1.2rem 2rem', borderBottom: '2px solid var(--accent-primary)' }}>
                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.2rem', alignItems: 'center' }}>
                                         <div>
                                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                            Transaction ID
+                                            Mã Giao Dịch (ID)
                                           </div>
                                           <div style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)', marginTop: '0.2rem' }}>
                                             {tx.id}
                                           </div>
                                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
-                                            Created By: <b>{tx.createdBy || 'System Admin'}</b>
+                                            Người tạo: <b>{tx.createdBy || 'Quản trị viên'}</b>
                                           </div>
                                         </div>
 
                                         <div>
                                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                            Location Flow
+                                            Vị Trí Kệ Kho Giao Dịch
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.3rem', fontSize: '0.9rem', fontWeight: 600 }}>
-                                            <span>{tx.locationFrom || 'SUPPLIER'}</span>
-                                            <ArrowRight size={14} color="var(--accent-primary)" />
-                                            <span>{tx.locationTo || 'CUSTOMER'}</span>
+                                            {tx.type === 'OUTBOUND' ? (
+                                              <span style={{ color: '#ef4444' }}>🔴 Xuất từ Kệ {tx.locationFrom || 'A01'}</span>
+                                            ) : tx.type === 'INBOUND' ? (
+                                              <span style={{ color: '#10b981' }}>🟢 Nhập kho tổng</span>
+                                            ) : (
+                                              <>
+                                                <span>Từ Kệ {tx.locationFrom}</span>
+                                                <ArrowRight size={14} color="var(--accent-primary)" />
+                                                <span>Đến Kệ {tx.locationTo}</span>
+                                              </>
+                                            )}
                                           </div>
                                         </div>
 
                                         <div>
                                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                            Notes / Reason
+                                            Ghi Chú / Lý Do
                                           </div>
                                           <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '0.3rem', fontStyle: 'italic' }}>
-                                            {tx.note || 'No notes specified for this transaction.'}
+                                            {tx.note || 'Không có ghi chú.'}
                                           </div>
                                         </div>
 
@@ -554,10 +557,10 @@ const Transactions = () => {
                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              alert(`Printing Dispatch Slip for Transaction:\nID: ${tx.id}\nProduct: ${prod?.name}\nQty: ${tx.quantity}\nDate: ${new Date(tx.createdAt).toLocaleString()}`);
+                                              alert(`In phiếu giao dịch:\nMã ID: ${tx.id}\nSản phẩm: ${prod?.name}\nSố lượng: ${tx.quantity}\nThời gian: ${new Date(tx.createdAt).toLocaleString('vi-VN')}`);
                                             }}
                                           >
-                                            <FileText size={14} /> Print Slip
+                                            <FileText size={14} /> In Phiếu Giao Dịch
                                           </button>
                                         </div>
                                       </div>
@@ -571,25 +574,25 @@ const Transactions = () => {
                       </table>
 
                       {totalPages > 1 && (
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1rem', alignItems: 'center' }}>
                           <button
                             className="btn btn-outline"
-                            disabled={(group.page || 1) === 1}
-                            onClick={() => fetchGroup(t.key, (group.page || 1) - 1)}
-                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                            disabled={group.page === 1}
+                            onClick={() => fetchGroup(t.key, group.page - 1)}
+                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
                           >
-                            Previous
+                            Trang trước
                           </button>
-                          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                            Page <strong>{group.page || 1}</strong> of <strong>{totalPages}</strong>
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            Trang <b>{group.page}</b> / <b>{totalPages}</b>
                           </span>
                           <button
                             className="btn btn-outline"
-                            disabled={(group.page || 1) === totalPages}
-                            onClick={() => fetchGroup(t.key, (group.page || 1) + 1)}
-                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                            disabled={group.page === totalPages}
+                            onClick={() => fetchGroup(t.key, group.page + 1)}
+                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
                           >
-                            Next
+                            Trang sau
                           </button>
                         </div>
                       )}
@@ -602,25 +605,27 @@ const Transactions = () => {
         })}
       </div>
 
-      {/* Modal - rendered via portal so it always overlays the whole page regardless of scroll containers */}
+      {/* CREATE TRANSACTION MODAL */}
       {showModal && ReactDOM.createPortal(
         <div
           className="modal-backdrop"
-          onClick={(e) => { if (e.target.classList.contains('modal-backdrop')) { setShowModal(false); setProductSearch(''); } }}
+          onClick={(e) => { if (e.target.classList.contains('modal-backdrop')) setShowModal(false); }}
         >
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '550px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
-            <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>New Transaction</h3>
+            <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>Tạo Giao Dịch Kho Mới</h3>
             <p className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
-              Create a new inbound, outbound, transfer, or stock adjustment order.
+              Tạo đơn Nhập kho, Xuất kho từ Kệ, Điều chuyển kệ hoặc Điều chỉnh kiểm kê.
             </p>
 
             <form onSubmit={handleCreateTransaction} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              
+              {/* Product Selector */}
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Product</label>
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Sản Phẩm</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="🔍 Type product name or SKU to filter..."
+                  placeholder="🔍 Gõ tên hoặc mã SKU để lọc nhanh..."
                   value={productSearch}
                   onChange={e => {
                     const searchVal = e.target.value;
@@ -643,32 +648,34 @@ const Transactions = () => {
                 >
                   {filteredProductsForSelect.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.sku}) {p.price ? `- ${p.price.toLocaleString()} VND` : ''}
+                      {p.name} ({p.sku}) {p.price ? `- ${p.price.toLocaleString('vi-VN')} VNĐ` : ''}
                     </option>
                   ))}
                   {filteredProductsForSelect.length === 0 && (
-                    <option value="" disabled>No products match your search</option>
+                    <option value="" disabled>Không tìm thấy sản phẩm phù hợp</option>
                   )}
                 </select>
               </div>
 
+              {/* Transaction Type */}
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Transaction Type</label>
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Loại Giao Dịch</label>
                 <select
                   className="form-input"
                   value={newTransaction.type}
                   onChange={e => setNewTransaction({ ...newTransaction, type: e.target.value })}
                 >
-                  <option value="INBOUND">INBOUND (Import / Restock)</option>
-                  <option value="OUTBOUND">OUTBOUND (Export / Sale)</option>
-                  <option value="TRANSFER">TRANSFER (Internal Relocation)</option>
-                  <option value="ADJUSTMENT">ADJUSTMENT (Stock Count Correction)</option>
+                  <option value="OUTBOUND">XUẤT KHO (Outbound)</option>
+                  <option value="INBOUND">NHẬP KHO (Inbound)</option>
+                  <option value="TRANSFER">ĐIỀU CHUYỂN KỆ (Transfer)</option>
+                  <option value="ADJUSTMENT">ĐIỀU CHỈNH KIỂM KÊ (Adjustment)</option>
                 </select>
               </div>
 
+              {/* Quantity */}
               <div className="form-group">
                 <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>
-                  Quantity
+                  Số Lượng
                 </label>
                 <input
                   required
@@ -681,45 +688,116 @@ const Transactions = () => {
                     setNewTransaction({ ...newTransaction, quantity: val === '' ? '' : parseInt(val, 10) });
                   }}
                 />
-                {newTransaction.type === 'ADJUSTMENT' && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'block' }}>
-                    Note: Use negative numbers to reduce stock (e.g. -5 for damaged items).
-                  </span>
-                )}
               </div>
 
-              {newTransaction.type !== 'INBOUND' && newTransaction.type !== 'ADJUSTMENT' && (
+              {/* OUTBOUND LOCATION FROM SELECTOR */}
+              {newTransaction.type === 'OUTBOUND' && (
                 <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Location From</label>
-                  <input
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>
+                    Từ Kệ Kho (Xuất Hàng Từ Kệ Nào)
+                  </label>
+                  <select
                     required
-                    type="text"
                     className="form-input"
                     value={newTransaction.locationFrom}
                     onChange={e => setNewTransaction({ ...newTransaction, locationFrom: e.target.value })}
-                  />
+                  >
+                    {productRacks.map(loc => {
+                      const item = loc.items?.find(i => i.productId === newTransaction.productId);
+                      return (
+                        <option key={loc.code} value={loc.code}>
+                          Kệ {loc.code} (Dãy {loc.aisle} - Đang lưu {item?.quantity || 0} sản phẩm)
+                        </option>
+                      );
+                    })}
+                    {productRacks.length === 0 && (
+                      <option value="" disabled>⚠️ Sản phẩm này chưa được xếp vào kệ nào (Hoặc đã hết hàng trên kệ)</option>
+                    )}
+                  </select>
+                  {productRacks.length > 0 && (
+                    <div style={{ fontSize: '0.78rem', color: '#10b981', marginTop: '4px' }}>
+                      🟢 Sản phẩm đang có sẵn trên {productRacks.length} kệ kho. Xuất kho sẽ tự động trừ số lượng trên kệ này.
+                    </div>
+                  )}
                 </div>
               )}
 
-              {newTransaction.type !== 'OUTBOUND' && (
+              {/* INBOUND HELPER NOTICE (NO RACK REQUIRED) */}
+              {newTransaction.type === 'INBOUND' && (
+                <div style={{ padding: '0.75rem 1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', fontSize: '0.82rem', color: '#10b981' }}>
+                  <Info size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                  Hàng nhập kho sẽ được ghi nhận vào tồn kho tổng. Bạn không cần chọn kệ kho khi nhập hàng.
+                </div>
+              )}
+
+              {/* TRANSFER LOCATIONS SELECTOR */}
+              {newTransaction.type === 'TRANSFER' && (
+                <>
+                  <div className="form-group">
+                    <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Từ Kệ Nguồn (Location From)</label>
+                    <select
+                      required
+                      className="form-input"
+                      value={newTransaction.locationFrom}
+                      onChange={e => setNewTransaction({ ...newTransaction, locationFrom: e.target.value })}
+                    >
+                      {productRacks.map(loc => {
+                        const item = loc.items?.find(i => i.productId === newTransaction.productId);
+                        return (
+                          <option key={loc.code} value={loc.code}>
+                            Kệ {loc.code} (Dãy {loc.aisle} - Đang lưu {item?.quantity || 0} sản phẩm)
+                          </option>
+                        );
+                      })}
+                      {productRacks.length === 0 && (
+                        <option value="" disabled>⚠️ Chưa có sản phẩm trên kệ nào để chuyển</option>
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Đến Kệ Đích (Location To)</label>
+                    <select
+                      required
+                      className="form-input"
+                      value={newTransaction.locationTo}
+                      onChange={e => setNewTransaction({ ...newTransaction, locationTo: e.target.value })}
+                    >
+                      <option value="">-- Chọn Kệ đến --</option>
+                      {warehouseLocations.filter(l => l.code !== newTransaction.locationFrom).map(l => (
+                        <option key={l.id} value={l.code}>
+                          Kệ {l.code} (Dãy {l.aisle} - Trống {l.maxCapacity - (l.currentItemsCount || 0)} chỗ)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* ADJUSTMENT LOCATION SELECTOR */}
+              {newTransaction.type === 'ADJUSTMENT' && (
                 <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Location To</label>
-                  <input
-                    required
-                    type="text"
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Kệ Kho Kiểm Kê</label>
+                  <select
                     className="form-input"
-                    value={newTransaction.locationTo}
-                    onChange={e => setNewTransaction({ ...newTransaction, locationTo: e.target.value })}
-                  />
+                    value={newTransaction.locationFrom}
+                    onChange={e => setNewTransaction({ ...newTransaction, locationFrom: e.target.value })}
+                  >
+                    <option value="DEFAULT_WAREHOUSE">Kho tổng (Mặc định)</option>
+                    {warehouseLocations.map(l => (
+                      <option key={l.id} value={l.code}>Kệ {l.code} (Dãy {l.aisle})</option>
+                    ))}
+                  </select>
                 </div>
               )}
 
+              {/* Note */}
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Note / Remarks</label>
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Ghi Chú / Lý Do</label>
                 <textarea
                   className="form-input"
                   rows="3"
-                  placeholder="Specify reason, invoice number, or details..."
+                  placeholder="Nhập số hóa đơn, lý do xuất nhập kho..."
                   value={newTransaction.note}
                   onChange={e => setNewTransaction({ ...newTransaction, note: e.target.value })}
                   style={{ resize: 'none', fontFamily: 'inherit' }}
@@ -733,10 +811,10 @@ const Transactions = () => {
                   style={{ background: 'var(--bg-glass)' }}
                   onClick={() => { setShowModal(false); setProductSearch(''); }}
                 >
-                  Cancel
+                  Hủy Bỏ
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Submit Order
+                  Xác Nhận Tạo Giao Dịch
                 </button>
               </div>
             </form>

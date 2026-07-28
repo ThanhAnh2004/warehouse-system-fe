@@ -124,12 +124,12 @@ const UserManagement = () => {
   };
 
   const handleDeleteUser = async (id) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
+    if (window.confirm('Bạn có chắc chắn muốn xóa người dùng này?')) {
       try {
         await apiClient.delete(`/users/${id}`);
         fetchUsers();
       } catch (err) {
-        alert('Error deleting user: ' + (err.response?.data?.message || err.message));
+        alert('Lỗi xóa người dùng: ' + (err.response?.data?.message || err.message));
       }
     }
   };
@@ -138,7 +138,6 @@ const UserManagement = () => {
     e.preventDefault();
     try {
       if (isEditMode) {
-        // Send only fields allowed by UpdateUserDto
         const payload = {
           fullname: newUser.fullname,
           role: newUser.role,
@@ -157,7 +156,7 @@ const UserManagement = () => {
       });
       fetchUsers();
     } catch (err) {
-      alert(`Error ${isEditMode ? 'updating' : 'creating'} user: ` + (err.response?.data?.message || err.message));
+      alert(`Lỗi ${isEditMode ? 'cập nhật' : 'tạo mới'} người dùng: ` + (err.response?.data?.message || err.message));
     }
   };
 
@@ -169,9 +168,9 @@ const UserManagement = () => {
   return (
     <div className="animate-slide-up">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
-        <h2 className="text-title">User Management</h2>
+        <h2 className="text-title">Quản Lý Người Dùng & Tài Khoản</h2>
         <button className="btn btn-primary" onClick={openAddModal}>
-          <Plus size={18} /> Add User
+          <Plus size={18} /> Thêm Người Dùng Mới
         </button>
       </div>
 
@@ -181,7 +180,7 @@ const UserManagement = () => {
             <Search size={18} color="var(--text-secondary)" />
             <input 
               type="text" 
-              placeholder="Search by email or name..." 
+              placeholder="Tìm kiếm theo email hoặc họ tên..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -192,19 +191,19 @@ const UserManagement = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+                <th style={{ width: '45px', textAlign: 'center' }}>STT</th>
                 <th>Email</th>
-                <th>Fullname</th>
-                <th>Role</th>
-                <th>Phone</th>
-                <th>Gender</th>
-                <th>Address</th>
-                <th>Actions</th>
+                <th>Họ Và Tên</th>
+                <th>Vai Trò (Role)</th>
+                <th>Số Điện Thoại</th>
+                <th>Giới Tính</th>
+                <th>Địa Chỉ</th>
+                <th>Thao Tác</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="8" style={{ padding: '2rem', textAlign: 'center' }}>Loading users...</td></tr>
+                <tr><td colSpan="8" style={{ padding: '2rem', textAlign: 'center' }}>Đang tải danh sách người dùng...</td></tr>
               ) : filteredUsers.map((u, idx) => (
                 <tr key={u._id}>
                   <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
@@ -212,19 +211,19 @@ const UserManagement = () => {
                   <td style={{ fontWeight: 600 }}>{u.fullname}</td>
                   <td>
                     <span className={`badge ${u.role === 'Admin' ? 'badge-danger' : (u.role === 'Manager' ? 'badge-primary' : 'badge-success')}`}>
-                      {u.role}
+                      {u.role === 'Admin' ? 'Quản trị viên (Admin)' : u.role === 'Manager' ? 'Quản lý (Manager)' : 'Nhân viên (Staff)'}
                     </span>
                   </td>
-                  <td>{u.phone || 'N/A'}</td>
-                  <td>{u.gender || 'N/A'}</td>
-                  <td>{u.address || 'N/A'}</td>
+                  <td>{u.phone || 'Chưa cập nhật'}</td>
+                  <td>{u.gender === 'Male' ? 'Nam' : u.gender === 'Female' ? 'Nữ' : 'Khác'}</td>
+                  <td>{u.address || 'Chưa cập nhật'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button 
                         className="btn btn-outline" 
                         style={{ padding: '0.25rem 0.5rem', background: 'transparent' }}
                         onClick={() => openEditModal(u)}
-                        title="Edit User"
+                        title="Sửa thông tin"
                       >
                         <Edit size={14} />
                       </button>
@@ -232,7 +231,7 @@ const UserManagement = () => {
                         className="btn btn-outline" 
                         style={{ padding: '0.25rem 0.5rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
                         onClick={() => handleDeleteUser(u._id)}
-                        title="Delete User"
+                        title="Xóa tài khoản"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -249,9 +248,8 @@ const UserManagement = () => {
       {showModal && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 className="text-title" style={{ fontSize: '1.5rem' }}>{isEditMode ? 'Edit User' : 'Add New User'}</h3>
+            <h3 className="text-title" style={{ fontSize: '1.5rem' }}>{isEditMode ? 'Chỉnh Sửa Người Dùng' : 'Thêm Người Dùng Mới'}</h3>
             <form onSubmit={handleSubmit} autoComplete="off" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Dummy hidden inputs to prevent Chrome / Edge password manager aggressive autofill */}
               <input type="text" name="fake_email_prevent_autofill" style={{ display: 'none' }} tabIndex="-1" />
               <input type="password" name="fake_password_prevent_autofill" style={{ display: 'none' }} tabIndex="-1" />
 
@@ -270,7 +268,7 @@ const UserManagement = () => {
               </div>
               {!isEditMode && (
                 <div className="form-group mb-4">
-                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Password</label>
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Mật Khẩu</label>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input 
                       required 
@@ -298,7 +296,7 @@ const UserManagement = () => {
                         padding: '0.2rem',
                         transition: 'color 0.2s'
                       }}
-                      title={showPassword ? "Hide password" : "Show password"}
+                      title={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -306,11 +304,11 @@ const UserManagement = () => {
                 </div>
               )}
               <div className="form-group mb-4">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Full Name</label>
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Họ Và Tên</label>
                 <input required type="text" className="form-input" value={newUser.fullname} onChange={e => setNewUser({...newUser, fullname: e.target.value})} />
               </div>
               <div className="form-group mb-4">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Role</label>
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Vai Trò (Role)</label>
                 <select className="form-input" value={newUser.role} onChange={e => handleRoleChange(e.target.value)}>
                   {roles.map(r => (
                     <option key={r.name} value={r.name}>{r.name}</option>
@@ -319,27 +317,27 @@ const UserManagement = () => {
               </div>
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <div className="form-group mb-4" style={{ flex: 1 }}>
-                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Phone</label>
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Số Điện Thoại</label>
                   <input 
                     required 
                     type="text" 
                     pattern="[0-9]{10,11}" 
-                    title="Phone number must be between 10 and 11 digits"
+                    title="Số điện thoại phải từ 10 đến 11 chữ số"
                     className="form-input" 
                     value={newUser.phone} 
                     onChange={e => setNewUser({...newUser, phone: e.target.value})} 
                   />
                 </div>
                 <div className="form-group mb-4" style={{ flex: 1 }}>
-                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Gender</label>
+                  <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Giới Tính</label>
                   <select required className="form-input" value={newUser.gender} onChange={e => setNewUser({...newUser, gender: e.target.value})}>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
+                    <option value="Male">Nam</option>
+                    <option value="Female">Nữ</option>
                   </select>
                 </div>
               </div>
               <div className="form-group mb-4">
-                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Address</label>
+                <label className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Địa Chỉ</label>
                 <input required type="text" className="form-input" value={newUser.address} onChange={e => setNewUser({...newUser, address: e.target.value})} />
               </div>
 
@@ -349,7 +347,7 @@ const UserManagement = () => {
                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                     <label className="text-title" style={{ fontSize: '1.1rem', marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <Key size={18} color="var(--accent-primary)" />
-                      Individual Permission Overrides
+                      Ghi Đè Quyền Hạn Riêng Cho Cá Nhân
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, color: 'var(--accent-primary)' }}>
                       <input 
@@ -357,7 +355,7 @@ const UserManagement = () => {
                         checked={isCustomPermissions} 
                         onChange={e => handleCustomPermissionsToggle(e.target.checked)} 
                       />
-                      Customize individual permissions
+                      Tùy chỉnh quyền riêng
                     </label>
                   </div>
 
@@ -413,8 +411,8 @@ const UserManagement = () => {
               )}
               
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">{isEditMode ? 'Save Changes' : 'Create User'}</button>
+                <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowModal(false)}>Hủy Bỏ</button>
+                <button type="submit" className="btn btn-primary">{isEditMode ? 'Lưu Thay Đổi' : 'Tạo Người Dùng'}</button>
               </div>
             </form>
           </div>

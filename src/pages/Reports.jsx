@@ -62,35 +62,35 @@ const Reports = () => {
     // Sheet 1: Tổng hợp tồn kho
     const summarySheet = XLSX.utils.json_to_sheet([
       {
-        'Total Products': reportData.totalProducts,
-        'Total Inventory Value (VND)': reportData.totalInventoryValue,
-        'Total Inbound Quantity': reportData.totalImports,
-        'Total Outbound Quantity': reportData.totalExports,
-        'Low Stock Items': reportData.lowStock,
-        'Report Date': new Date(reportData.reportDate).toLocaleString('en-US'),
+        'Tổng sản phẩm': reportData.totalProducts,
+        'Tổng giá trị tồn kho (VNĐ)': reportData.totalInventoryValue,
+        'Tổng lượng nhập kho': reportData.totalImports,
+        'Tổng lượng xuất kho': reportData.totalExports,
+        'Số sản phẩm thiếu hàng': reportData.lowStock,
+        'Ngày xuất báo cáo': new Date(reportData.reportDate).toLocaleString('vi-VN'),
       },
     ]);
-    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary Report');
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Bao Cao Tong Hop');
 
     // Sheet 2: Dự báo nhu cầu theo sản phẩm
     if (forecastTrends && forecastTrends.products && forecastTrends.products.length > 0) {
       const forecastSheet = XLSX.utils.json_to_sheet(
         forecastTrends.products.map((p) => ({
-          Product: p.name,
+          'Tên sản phẩm': p.name,
           SKU: p.sku,
-          'Current Stock': p.currentStock,
-          'Total Outbound (history)': p.outboundTotal,
-          [`Forecast Total (${forecastTrends.days} days)`]: p.totalForecast,
-          'Avg Daily Forecast': p.avgDailyForecast,
+          'Tồn kho hiện tại': p.currentStock,
+          'Tổng xuất kho (Lịch sử)': p.outboundTotal,
+          [`Tổng dự báo (${forecastTrends.days} ngày)`]: p.totalForecast,
+          'Dự báo TB/Ngày': p.avgDailyForecast,
         }))
       );
-      XLSX.utils.book_append_sheet(wb, forecastSheet, 'Demand Forecast');
+      XLSX.utils.book_append_sheet(wb, forecastSheet, 'Du Bao Nhu Cau');
     }
 
-    XLSX.writeFile(wb, `Inventory_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `Bao_Cao_Kho_Hang_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading report...</div>;
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Đang tải báo cáo...</div>;
 
   const fmtVND = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(n || 0);
 
@@ -99,14 +99,14 @@ const Reports = () => {
   return (
     <div className="animate-slide-up">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
-        <h1 className="text-title">Summary Report</h1>
+        <h1 className="text-title">Báo Cáo & Thống Kê Tổng Hợp Kho Hàng</h1>
         <button
           onClick={exportToExcel}
           className="btn btn-primary"
           style={{ display: 'flex', gap: '0.5rem', background: 'var(--success)' }}
         >
           <Download size={20} />
-          Export Excel
+          Xuất File Excel
         </button>
       </div>
 
@@ -114,7 +114,7 @@ const Reports = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" style={{ marginBottom: '2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
             <div className="glass-card flex justify-between items-center" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-subtitle" style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Total Products</p>
+                <p className="text-subtitle" style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Tổng Số Sản Phẩm</p>
                 <h3 style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--text-primary)' }}>{reportData.totalProducts}</h3>
               </div>
               <div style={{ padding: '1rem', background: 'var(--accent-light)', color: 'var(--accent-primary)', borderRadius: '50%' }}>
@@ -124,9 +124,9 @@ const Reports = () => {
 
             <div className="glass-card flex justify-between items-center" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-subtitle" style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Inventory Value</p>
+                <p className="text-subtitle" style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Tổng Giá Trị Tồn Kho</p>
                 <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(reportData.totalInventoryValue)}
+                  {fmtVND(reportData.totalInventoryValue)}
                 </h3>
               </div>
               <div style={{ padding: '1rem', background: 'rgba(99, 102, 241, 0.1)', color: 'rgb(99, 102, 241)', borderRadius: '50%' }}>
@@ -136,7 +136,7 @@ const Reports = () => {
 
             <div className="glass-card flex justify-between items-center" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-subtitle" style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Total Inbound Qty</p>
+                <p className="text-subtitle" style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Tổng Lượng Nhập Kho</p>
                 <h3 style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--success)' }}>{reportData.totalImports}</h3>
               </div>
               <div style={{ padding: '1rem', background: 'var(--success-light)', color: 'var(--success)', borderRadius: '50%' }}>
@@ -146,7 +146,7 @@ const Reports = () => {
 
             <div className="glass-card flex justify-between items-center" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-subtitle" style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Total Outbound Qty</p>
+                <p className="text-subtitle" style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Tổng Lượng Xuất Kho</p>
                 <h3 style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--warning)' }}>{reportData.totalExports}</h3>
               </div>
               <div style={{ padding: '1rem', background: 'var(--warning-light)', color: 'var(--warning)', borderRadius: '50%' }}>
@@ -161,27 +161,27 @@ const Reports = () => {
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '2.5rem 0 1.25rem' }}>
             <PieChart size={24} color="var(--accent-primary)" />
-            <h2 className="text-title" style={{ marginBottom: 0 }}>Inventory Analytics</h2>
+            <h2 className="text-title" style={{ marginBottom: 0 }}>Phân Tích Chi Tiết Kho Hàng</h2>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
             {/* Category breakdown */}
             <div className="glass-card">
-              <h3 className="text-subtitle" style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>Value by Category</h3>
+              <h3 className="text-subtitle" style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>Giá Trị Tồn Kho Theo Danh Mục</h3>
               <div className="table-container" style={{ overflowX: 'auto' }}>
                 <table className="data-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '45px', textAlign: 'center' }}>#</th>
-                      <th>Category</th>
-                      <th style={{ textAlign: 'right' }}>Items</th>
-                      <th style={{ textAlign: 'right' }}>Qty</th>
-                      <th style={{ textAlign: 'right' }}>Value</th>
+                      <th style={{ width: '45px', textAlign: 'center' }}>STT</th>
+                      <th>Danh Mục</th>
+                      <th style={{ textAlign: 'right' }}>Số Sản Phẩm</th>
+                      <th style={{ textAlign: 'right' }}>Tổng Số Lượng</th>
+                      <th style={{ textAlign: 'right' }}>Tổng Giá Trị</th>
                     </tr>
                   </thead>
                   <tbody>
                     {analytics.categoryBreakdown.length === 0 ? (
-                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>No data</td></tr>
+                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>Chưa có dữ liệu</td></tr>
                     ) : analytics.categoryBreakdown.map((c, idx) => (
                       <tr key={c.category}>
                         <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
@@ -198,20 +198,20 @@ const Reports = () => {
 
             {/* Top products by value */}
             <div className="glass-card">
-              <h3 className="text-subtitle" style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>Top Products by Stock Value</h3>
+              <h3 className="text-subtitle" style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>Top 5 Sản Phẩm Có Giá Trị Tồn Cao Nhất</h3>
               <div className="table-container" style={{ overflowX: 'auto' }}>
                 <table className="data-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '45px', textAlign: 'center' }}>#</th>
-                      <th>Product</th>
-                      <th style={{ textAlign: 'right' }}>Qty</th>
-                      <th style={{ textAlign: 'right' }}>Value</th>
+                      <th style={{ width: '45px', textAlign: 'center' }}>STT</th>
+                      <th>Tên Sản Phẩm</th>
+                      <th style={{ textAlign: 'right' }}>Số Lượng Tồn</th>
+                      <th style={{ textAlign: 'right' }}>Tổng Giá Trị</th>
                     </tr>
                   </thead>
                   <tbody>
                     {analytics.topProductsByValue.length === 0 ? (
-                      <tr><td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>No data</td></tr>
+                      <tr><td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>Chưa có dữ liệu</td></tr>
                     ) : analytics.topProductsByValue.map((p, idx) => (
                       <tr key={p.sku}>
                         <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
@@ -232,51 +232,50 @@ const Reports = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', margin: '2.5rem 0 1.25rem', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <TrendingUp size={24} color="var(--accent-primary)" />
-          <h2 className="text-title" style={{ marginBottom: 0 }}>Demand Forecast Trends</h2>
+          <h2 className="text-title" style={{ marginBottom: 0 }}>Dự Báo Nhu Cầu Tiêu Thụ Hàng Hóa (AI)</h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Horizon:</span>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Thời gian dự báo:</span>
           <select
             value={forecastDays}
             onChange={(e) => setForecastDays(Number(e.target.value))}
             className="form-input"
             style={{ width: 'auto', padding: '0.5rem 1rem' }}
           >
-            <option value={7}>Next 7 days</option>
-            <option value={14}>Next 14 days</option>
-            <option value={30}>Next 30 days</option>
+            <option value={7}>7 ngày tới</option>
+            <option value={14}>14 ngày tới</option>
+            <option value={30}>30 ngày tới</option>
           </select>
         </div>
       </div>
 
       {forecastLoading ? (
         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-          Loading forecast data...
+          Đang tính toán dữ liệu dự báo...
         </div>
       ) : hasForecast ? (
         <>
           {/* Per-product forecast table */}
           <div className="glass-card">
             <h3 className="text-subtitle" style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>
-              Top {forecastTrends.products.length} Products - Predicted Demand ({forecastTrends.days} days)
+              Top {forecastTrends.products.length} Sản Phẩm Xuất Nhiều Nhất - Dự Báo Nhu Cầu ({forecastTrends.days} Ngày Tới)
             </h3>
             <div className="table-container" style={{ overflowX: 'auto' }}>
               <table className="data-table" style={{ width: '100%' }}>
                 <thead>
                   <tr>
-                    <th style={{ width: '45px', textAlign: 'center' }}>#</th>
-                    <th>Product</th>
-                    <th>SKU</th>
-                    <th style={{ textAlign: 'right' }}>Current Stock</th>
-                    <th style={{ textAlign: 'right' }}>Outbound (history)</th>
-                    <th style={{ textAlign: 'right' }}>Forecast Total</th>
-                    <th style={{ textAlign: 'right' }}>Avg / Day</th>
-                    <th style={{ textAlign: 'center' }}>Signal</th>
+                    <th style={{ width: '45px', textAlign: 'center' }}>STT</th>
+                    <th>Tên Sản Phẩm</th>
+                    <th>Mã SKU</th>
+                    <th style={{ textAlign: 'right' }}>Tồn Hiện Tại</th>
+                    <th style={{ textAlign: 'right' }}>Tổng Xuất (Lịch sử)</th>
+                    <th style={{ textAlign: 'right' }}>Tổng Dự Báo</th>
+                    <th style={{ textAlign: 'right' }}>Dự Báo TB/Ngày</th>
+                    <th style={{ textAlign: 'center' }}>Khuyến Nghị</th>
                   </tr>
                 </thead>
                 <tbody>
                   {forecastTrends.products.map((p, idx) => {
-                    // Cảnh báo: nếu dự báo nhu cầu vượt tồn kho hiện tại -> cần nhập thêm
                     const needRestock = p.totalForecast > p.currentStock;
                     return (
                       <tr key={p.productId}>
@@ -296,7 +295,7 @@ const Reports = () => {
                               fontWeight: 600,
                             }}
                           >
-                            {needRestock ? 'Restock' : 'Healthy'}
+                            {needRestock ? 'Cần nhập thêm' : 'Tồn an toàn'}
                           </span>
                         </td>
                       </tr>
@@ -309,7 +308,7 @@ const Reports = () => {
         </>
       ) : (
         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-          Not enough outbound transaction history to generate demand forecasts yet.
+          Chưa đủ lịch sử giao dịch xuất kho để tạo biểu đồ dự báo nhu cầu.
         </div>
       )}
     </div>

@@ -21,7 +21,7 @@ const Alerts = () => {
 
   useEffect(() => {
     fetchAlerts();
-    const interval = setInterval(fetchAlerts, 15000); // Auto refresh mỗi 15s
+    const interval = setInterval(fetchAlerts, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -35,7 +35,7 @@ const Alerts = () => {
   };
 
   const deleteAlert = async (id) => {
-    if (!window.confirm('Delete this alert?')) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xóa cảnh báo này?')) return;
     try {
       await apiClient.delete(`/notifications/${id}`);
       setAlerts((prev) => prev.filter((a) => a._id !== id));
@@ -58,18 +58,18 @@ const Alerts = () => {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Bell size={28} color="var(--accent-primary)" />
-          <h1 className="text-title" style={{ marginBottom: 0 }}>Stock Alerts</h1>
+          <h1 className="text-title" style={{ marginBottom: 0 }}>Cảnh Báo Tồn Kho & Thông Báo</h1>
           {unreadCount > 0 && (
-            <span className="badge badge-danger">{unreadCount} unread</span>
+            <span className="badge badge-danger">{unreadCount} chưa đọc</span>
           )}
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button className="btn btn-outline" onClick={fetchAlerts} style={{ background: 'var(--bg-glass)' }}>
-            <RefreshCw size={16} /> Refresh
+            <RefreshCw size={16} /> Làm mới
           </button>
           {unreadCount > 0 && (
             <button className="btn btn-primary" onClick={markAllAsRead}>
-              <Check size={16} /> Mark all read
+              <Check size={16} /> Đánh dấu đã đọc tất cả
             </button>
           )}
         </div>
@@ -82,26 +82,26 @@ const Alerts = () => {
           onClick={() => setFilter('all')}
           style={{ borderRadius: '20px', padding: '0.4rem 1.2rem', fontSize: '0.9rem', background: filter === 'all' ? undefined : 'var(--bg-glass)' }}
         >
-          All ({alerts.length})
+          Tất cả ({alerts.length})
         </button>
         <button
           className={`btn ${filter === 'unread' ? 'btn-primary' : 'btn-outline'}`}
           onClick={() => setFilter('unread')}
           style={{ borderRadius: '20px', padding: '0.4rem 1.2rem', fontSize: '0.9rem', background: filter === 'unread' ? undefined : 'var(--bg-glass)' }}
         >
-          Unread ({unreadCount})
+          Chưa đọc ({unreadCount})
         </button>
       </div>
 
       {loading ? (
         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-          Loading alerts...
+          Đang tải cảnh báo...
         </div>
       ) : filteredAlerts.length === 0 ? (
         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '3rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
           <CheckCircle2 size={40} color="var(--success)" />
-          <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>No {filter === 'unread' ? 'unread ' : ''}alerts</p>
-          <p>All stock levels are healthy.</p>
+          <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Không có cảnh báo {filter === 'unread' ? 'chưa đọc ' : ''}nào</p>
+          <p>Tồn kho của tất cả các sản phẩm đang ở mức an toàn.</p>
         </div>
       ) : (
         <div className="glass-card" style={{ padding: '0.5rem' }}>
@@ -131,20 +131,20 @@ const Alerts = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{alert.productName}</span>
                   <span className="badge" style={{ background: accentLight, color: accent, fontSize: '0.65rem' }}>
-                    {isOver ? 'OVERSTOCK' : 'LOW STOCK'}
+                    {isOver ? 'TỒN QUÁ NHIỀU' : 'THIẾU TỒN KHO'}
                   </span>
                   {!alert.isRead && (
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: accent, display: 'inline-block' }}></span>
                   )}
                   {alert.currentStock !== undefined && alert.threshold !== undefined && (
                     <span className="badge" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
-                      {alert.currentStock} / {alert.threshold}
+                      Hiện tại: {alert.currentStock} / Ngưỡng: {alert.threshold}
                     </span>
                   )}
                 </div>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{alert.message}</p>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  {alert.createdAt ? new Date(alert.createdAt).toLocaleString() : ''}
+                  {alert.createdAt ? new Date(alert.createdAt).toLocaleString('vi-VN') : ''}
                 </span>
               </div>
 
@@ -153,7 +153,7 @@ const Alerts = () => {
                   <button
                     className="btn btn-outline"
                     onClick={() => markAsRead(alert._id)}
-                    title="Mark as read"
+                    title="Đánh dấu đã đọc"
                     style={{ padding: '0.4rem 0.6rem', background: 'transparent' }}
                   >
                     <Check size={16} />
@@ -162,7 +162,7 @@ const Alerts = () => {
                 <button
                   className="btn btn-outline"
                   onClick={() => deleteAlert(alert._id)}
-                  title="Delete alert"
+                  title="Xóa cảnh báo"
                   style={{ padding: '0.4rem 0.6rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
                 >
                   <Trash2 size={16} />

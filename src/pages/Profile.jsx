@@ -53,19 +53,19 @@ const Profile = () => {
         updateUser({ fullname: editForm.fullname });
         setShowEditModal(false);
         fetchProfile();
-        alert('Profile updated successfully!');
+        alert('Cập nhật thông tin cá nhân thành công!');
       } else {
-        alert('Failed to update profile: ' + response.data.message);
+        alert('Cập nhật thất bại: ' + response.data.message);
       }
     } catch (error) {
-      alert('Error updating profile: ' + (error.response?.data?.message || error.message));
+      alert('Lỗi cập nhật thông tin: ' + (error.response?.data?.message || error.message));
     }
   };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert("New passwords do not match!");
+      alert("Mật khẩu mới nhập lại không khớp!");
       return;
     }
     try {
@@ -74,25 +74,25 @@ const Profile = () => {
         newPassword: passwordForm.newPassword
       });
       if (response.data.success) {
-        alert('Password changed successfully!');
+        alert('Đổi mật khẩu thành công!');
         setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
         setShowPasswordModal(false);
       } else {
-        alert('Failed to change password: ' + response.data.message);
+        alert('Đổi mật khẩu thất bại: ' + response.data.message);
       }
     } catch (error) {
-      alert('Error changing password: ' + (error.response?.data?.message || error.message));
+      alert('Lỗi đổi mật khẩu: ' + (error.response?.data?.message || error.message));
     }
   };
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading profile data...</div>;
+    return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Đang tải thông tin cá nhân...</div>;
   }
 
   return (
     <div className="animate-slide-up">
       <div className="page-header" style={{ marginBottom: '2rem' }}>
-        <h2 className="text-title">Account Information</h2>
+        <h2 className="text-title">Thông Tin Tài Khoản Cá Nhân</h2>
       </div>
 
       <div className="grid grid-cols-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem' }}>
@@ -103,22 +103,22 @@ const Profile = () => {
           </div>
           <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{profileData?.fullname}</h3>
           <p className="badge badge-primary" style={{ textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '1px', marginBottom: '2rem' }}>
-            {profileData?.role}
+            {profileData?.role === 'Admin' ? 'Quản Trị Viên (Admin)' : profileData?.role === 'Manager' ? 'Quản Lý Kho (Manager)' : 'Nhân Viên Kho (Staff)'}
           </p>
 
           <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: 'auto' }}>
             <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setShowEditModal(true)}>
-              <Edit2 size={16} /> Edit Profile
+              <Edit2 size={16} /> Sửa Thông Tin
             </button>
             <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setShowPasswordModal(true)}>
-              <Lock size={16} /> Change Password
+              <Lock size={16} /> Đổi Mật Khẩu
             </button>
           </div>
         </div>
 
         {/* Detailed Information */}
         <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <h3 className="text-title" style={{ fontSize: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>Personal details</h3>
+          <h3 className="text-title" style={{ fontSize: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>Chi Tiết Lý Lịch</h3>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -126,7 +126,7 @@ const Profile = () => {
                 <Mail size={18} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Email</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Địa Chỉ Email</span>
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{profileData?.email}</span>
               </div>
             </div>
@@ -136,8 +136,8 @@ const Profile = () => {
                 <Phone size={18} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Phone Number</span>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{profileData?.phone || 'N/A'}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Số Điện Thoại</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{profileData?.phone || 'Chưa cập nhật'}</span>
               </div>
             </div>
 
@@ -146,8 +146,8 @@ const Profile = () => {
                 <User size={18} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Gender</span>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{profileData?.gender || 'N/A'}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Giới Tính</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{profileData?.gender === 'Male' ? 'Nam' : profileData?.gender === 'Female' ? 'Nữ' : 'Khác'}</span>
               </div>
             </div>
 
@@ -156,8 +156,8 @@ const Profile = () => {
                 <MapPin size={18} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Address</span>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{profileData?.address || 'N/A'}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Địa Chỉ Nơi Ở</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{profileData?.address || 'Chưa cập nhật'}</span>
               </div>
             </div>
           </div>
@@ -168,40 +168,40 @@ const Profile = () => {
       {showEditModal && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '500px' }}>
-            <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Edit Profile</h3>
+            <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Cập Nhật Thông Tin</h3>
             <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Email (Locked)</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Email (Cố định)</label>
                 <input type="text" className="form-input" value={profileData?.email} disabled style={{ opacity: 0.7, background: 'var(--bg-primary)' }} />
               </div>
               
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Full Name</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Họ Và Tên</label>
                 <input required type="text" className="form-input" value={editForm.fullname} onChange={e => setEditForm({ ...editForm, fullname: e.target.value })} />
               </div>
 
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Phone</label>
-                  <input required type="text" pattern="[0-9]{10,11}" title="Phone number must be 10-11 digits" className="form-input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} />
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Số Điện Thoại</label>
+                  <input required type="text" pattern="[0-9]{10,11}" title="Số điện thoại phải từ 10-11 chữ số" className="form-input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Gender</label>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Giới Tính</label>
                   <select required className="form-input" value={editForm.gender} onChange={e => setEditForm({ ...editForm, gender: e.target.value })}>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
+                    <option value="Male">Nam</option>
+                    <option value="Female">Nữ</option>
                   </select>
                 </div>
               </div>
 
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Address</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Địa Chỉ</label>
                 <input required type="text" className="form-input" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} />
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowEditModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Changes</button>
+                <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowEditModal(false)}>Hủy Bỏ</button>
+                <button type="submit" className="btn btn-primary">Lưu Thay Đổi</button>
               </div>
             </form>
           </div>
@@ -212,11 +212,11 @@ const Profile = () => {
       {showPasswordModal && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '500px' }}>
-            <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Change Password</h3>
+            <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Đổi Mật Khẩu Tài Khoản</h3>
             <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Old Password</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Mật Khẩu Hiện Tại</label>
                 <div style={{ position: 'relative' }}>
                   <input required type={showOldPass ? "text" : "password"} className="form-input" value={passwordForm.oldPassword} onChange={e => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })} />
                   <button type="button" onClick={() => setShowOldPass(!showOldPass)} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
@@ -226,7 +226,7 @@ const Profile = () => {
               </div>
 
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>New Password</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Mật Khẩu Mới</label>
                 <div style={{ position: 'relative' }}>
                   <input required type={showNewPass ? "text" : "password"} minLength={6} className="form-input" value={passwordForm.newPassword} onChange={e => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
                   <button type="button" onClick={() => setShowNewPass(!showNewPass)} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
@@ -236,7 +236,7 @@ const Profile = () => {
               </div>
 
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Confirm New Password</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'block' }}>Nhập Lại Mật Khẩu Mới</label>
                 <div style={{ position: 'relative' }}>
                   <input required type={showConfirmPass ? "text" : "password"} minLength={6} className="form-input" value={passwordForm.confirmPassword} onChange={e => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
                   <button type="button" onClick={() => setShowConfirmPass(!showConfirmPass)} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
@@ -246,8 +246,8 @@ const Profile = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowPasswordModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" style={{ background: 'var(--danger)' }}>Update Password</button>
+                <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowPasswordModal(false)}>Hủy Bỏ</button>
+                <button type="submit" className="btn btn-primary" style={{ background: 'var(--danger)' }}>Cập Nhật Mật Khẩu</button>
               </div>
             </form>
           </div>

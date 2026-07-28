@@ -15,6 +15,8 @@ import Alerts from './pages/Alerts';
 import SystemHealth from './pages/SystemHealth';
 import Profile from './pages/Profile';
 import RoleManagement from './pages/RoleManagement';
+import WarehouseMap from './pages/WarehouseMap';
+import LocationManagement from './pages/LocationManagement';
 
 const App = () => {
   return (
@@ -28,6 +30,8 @@ const App = () => {
               <Route path="/" element={<Dashboard />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/alerts" element={<Alerts />} />
+              <Route path="/warehouse-map" element={<WarehouseMap />} />
+              <Route path="/locations" element={<LocationManagement />} />
             </Route>
             
             <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']} />}>
