@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
 import {
   Plus, Search, Download, Calendar, ChevronDown, ChevronUp, ChevronRight,
-  FileText, ArrowRight, ArrowDownCircle, ArrowUpCircle, Repeat, SlidersHorizontal, Info
+  FileText, ArrowRight, ArrowDownCircle, ArrowUpCircle, Repeat, SlidersHorizontal, Info, X
 } from 'lucide-react';
 
 const PAGE_SIZE = 10;
@@ -45,6 +45,35 @@ const Transactions = () => {
 
   const [expanded, setExpanded] = useState({});
   const [groups, setGroups] = useState({});
+
+  // Lock body scroll when modal is active
+  useEffect(() => {
+    if (showModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [showModal]);
+
+  const isMobile = window.innerWidth <= 768;
+  const modalBackdropStyle = {
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: isMobile ? 0 : 'var(--sidebar-width, 280px)',
+    background: 'rgba(15, 23, 42, 0.65)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    padding: '1rem',
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -608,14 +637,49 @@ const Transactions = () => {
       {/* CREATE TRANSACTION MODAL */}
       {showModal && ReactDOM.createPortal(
         <div
-          className="modal-backdrop"
-          onClick={(e) => { if (e.target.classList.contains('modal-backdrop')) setShowModal(false); }}
+          style={modalBackdropStyle}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowModal(false);
+              setProductSearch('');
+            }
+          }}
         >
-          <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '550px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
-            <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>Tạo Giao Dịch Kho Mới</h3>
-            <p className="text-subtitle" style={{ fontSize: '0.85rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
-              Tạo đơn Nhập kho, Xuất kho từ Kệ, Điều chuyển kệ hoặc Điều chỉnh kiểm kê.
-            </p>
+          <div
+            className="glass-card animate-scale-in"
+            style={{
+              maxWidth: '580px',
+              width: '92%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '1.75rem',
+              borderRadius: '16px',
+              background: 'var(--bg-card, #ffffff)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              border: '1px solid var(--border-color)'
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Plus size={22} color="var(--accent-primary)" />
+                  <h3 className="text-subtitle" style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)', fontSize: '1.15rem' }}>
+                    Tạo Giao Dịch Kho Mới
+                  </h3>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                  Tạo đơn Nhập kho, Xuất kho từ Kệ, Điều chuyển kệ hoặc Điều chỉnh kiểm kê.
+                </p>
+              </div>
+              <button
+                className="btn"
+                style={{ background: 'transparent', border: 'none', padding: '4px', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                onClick={() => { setShowModal(false); setProductSearch(''); }}
+              >
+                <X size={20} />
+              </button>
+            </div>
 
             <form onSubmit={handleCreateTransaction} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               

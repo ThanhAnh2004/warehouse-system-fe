@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-import { ArrowLeft, TrendingUp, PackageSearch, Tag } from 'lucide-react';
+import { ArrowLeft, TrendingUp, PackageSearch, Tag, Edit2, Trash2, Save, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import EoqCard from '../components/EoqCard';
 
@@ -16,6 +16,15 @@ const CATEGORIES = [
   'Linh kiện & Bán dẫn'
 ];
 
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${cleanBaseUrl}${cleanUrl}`;
+};
+
 const ProductDetails = () => {
   const { sku } = useParams();
   const navigate = useNavigate();
@@ -25,6 +34,7 @@ const ProductDetails = () => {
   const [forecast, setForecast] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     price: '',
@@ -87,6 +97,7 @@ const ProductDetails = () => {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     try {
+      setSubmitting(true);
       const payload = {
         name: editForm.name,
         price: Number(editForm.price),
@@ -113,152 +124,177 @@ const ProductDetails = () => {
       }
       fetchDetails();
       setIsEditing(false);
+      alert('Cập nhật thông tin sản phẩm thành công!');
     } catch (e) {
       console.error(e);
-      alert('Cập nhật sản phẩm thất bại!');
+      alert('Cập nhật sản phẩm thất bại: ' + (e.response?.data?.message || e.message));
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {
+    if (window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này khỏi hệ thống?')) {
       try {
         await apiClient.delete(`/inventory/products/${sku}`);
+        alert('Đã xóa sản phẩm thành công!');
         navigate('/inventory');
       } catch (e) {
         console.error(e);
-        alert('Xóa sản phẩm thất bại!');
+        alert('Xóa sản phẩm thất bại: ' + (e.response?.data?.message || e.message));
       }
     }
   };
 
-  if (loading) return <div className="page-container animate-fade-in">Đang tải chi tiết sản phẩm...</div>;
-  if (!product) return <div className="page-container animate-fade-in">Không tìm thấy sản phẩm.</div>;
+  if (loading) return <div className="page-container animate-fade-in" style={{ padding: '2rem', textAlign: 'center' }}>Đang tải chi tiết sản phẩm...</div>;
+  if (!product) return <div className="page-container animate-fade-in" style={{ padding: '2rem', textAlign: 'center' }}>Không tìm thấy sản phẩm.</div>;
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in" style={{ paddingBottom: '3rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-        <button className="btn btn-outline" onClick={() => navigate('/inventory')} style={{ padding: '0.5rem' }}>
+        <button className="btn btn-outline" onClick={() => navigate('/inventory')} style={{ padding: '0.5rem', borderRadius: '10px' }}>
           <ArrowLeft size={20} />
         </button>
-        <h2>Chi Tiết Sản Phẩm: {product.name}</h2>
+        <h2 className="text-title" style={{ margin: 0 }}>Chi Tiết Sản Phẩm: {product.name}</h2>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: user?.role !== 'Staff' ? '1fr 2fr' : '1fr', gap: '2rem' }}>
-        {/* Left Column: Product Info */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: user?.role === 'Staff' ? '600px' : 'none' }}>
-          <div style={{ textAlign: 'center' }}>
-            {product.imageUrl ? (
-              <img src={product.imageUrl} alt={product.name} style={{ width: '100%', maxWidth: '200px', borderRadius: '12px', objectFit: 'cover' }} />
+        {/* Left Column: Product Info & Edit Form */}
+        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: 'fit-content', padding: '1.75rem', borderRadius: '16px' }}>
+          <div style={{ textAlign: 'center', padding: '1rem', background: 'var(--bg-glass, rgba(255, 255, 255, 0.05))', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+            {getImageUrl(product.imageUrl) ? (
+              <img src={getImageUrl(product.imageUrl)} alt={product.name} style={{ width: '100%', maxWidth: '220px', maxHeight: '220px', borderRadius: '12px', objectFit: 'cover', margin: '0 auto', display: 'block' }} />
             ) : (
-              <div style={{ width: '100%', height: '200px', backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', color: 'var(--text-secondary)' }}>
-                <PackageSearch size={48} />
+              <div style={{ width: '100%', height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                <PackageSearch size={54} />
               </div>
             )}
           </div>
+
           <div>
             {isEditing ? (
               <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Loại / Danh Mục Sản Phẩm</label>
-                  <select className="form-input" value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value })}>
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Loại / Danh Mục Sản Phẩm</label>
+                  <select className="form-input" style={{ borderRadius: '10px' }} value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value })}>
                     {CATEGORIES.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
                 </div>
-                <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Tên Sản Phẩm</label>
+
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tên Sản Phẩm</label>
                   <input 
                     required 
                     type="text" 
                     className="form-input" 
+                    style={{ borderRadius: '10px' }}
                     value={editForm.name} 
                     onChange={e => setEditForm({ ...editForm, name: e.target.value })} 
                   />
                 </div>
-                <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Đơn Giá (VNĐ)</label>
+
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Đơn Giá (VNĐ)</label>
                   <input 
                     required 
                     type="number" 
                     className="form-input" 
+                    style={{ borderRadius: '10px' }}
                     value={editForm.price} 
                     onChange={e => setEditForm({ ...editForm, price: e.target.value })} 
                   />
                 </div>
-                <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Mô Tả Sản Phẩm</label>
+
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mô Tả Sản Phẩm</label>
                   <textarea 
                     className="form-input" 
                     rows="3" 
-                    style={{ resize: 'none' }}
+                    style={{ resize: 'none', borderRadius: '10px', fontFamily: 'inherit' }}
                     value={editForm.description} 
                     onChange={e => setEditForm({ ...editForm, description: e.target.value })} 
                   />
                 </div>
-                <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Số Lượng Tồn Kho</label>
-                  <input 
-                    required 
-                    type="number" 
-                    min="0"
-                    className="form-input" 
-                    value={editForm.quantity} 
-                    onChange={e => setEditForm({ ...editForm, quantity: e.target.value })} 
-                  />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Số Lượng Tồn Kho</label>
+                    <input 
+                      required 
+                      type="number" 
+                      min="0"
+                      className="form-input" 
+                      style={{ borderRadius: '10px' }}
+                      value={editForm.quantity} 
+                      onChange={e => setEditForm({ ...editForm, quantity: e.target.value })} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Ngưỡng Báo Thiếu (Min)</label>
+                    <input 
+                      type="number" 
+                      className="form-input" 
+                      style={{ borderRadius: '10px' }}
+                      value={editForm.minStockLevel} 
+                      onChange={e => setEditForm({ ...editForm, minStockLevel: e.target.value })} 
+                    />
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Ngưỡng Báo Thiếu (Min)</label>
-                  <input 
-                    type="number" 
-                    className="form-input" 
-                    value={editForm.minStockLevel} 
-                    onChange={e => setEditForm({ ...editForm, minStockLevel: e.target.value })} 
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Thay Đổi Ảnh Sản Phẩm</label>
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Thay Đổi Ảnh Sản Phẩm</label>
                   <input 
                     type="file" 
                     accept="image/*" 
                     className="form-input" 
+                    style={{ borderRadius: '10px' }}
                     onChange={e => setEditForm({ ...editForm, image: e.target.files[0] })} 
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                  <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Lưu Thay Đổi</button>
-                  <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setIsEditing(false)}>Hủy</button>
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                  <button type="submit" className="btn btn-primary" disabled={submitting} style={{ flex: 1, gap: '6px', justifyContent: 'center' }}>
+                    <Save size={16} /> {submitting ? 'Đang lưu...' : 'Lưu Thay Đổi'}
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn" 
+                    style={{ flex: 1, background: '#ef4444', color: '#ffffff', border: 'none', gap: '6px', justifyContent: 'center', fontWeight: 600 }}
+                    onClick={() => setIsEditing(false)}
+                  >
+                    <X size={16} /> Hủy
+                  </button>
                 </div>
               </form>
             ) : (
               <>
                 <div style={{ marginBottom: '1rem' }}>
-                  <span className="badge badge-primary" style={{ fontWeight: 700, padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}>
+                  <span className="badge badge-primary" style={{ fontWeight: 700, padding: '0.4rem 0.8rem', fontSize: '0.82rem', borderRadius: '20px' }}>
                     🏷️ {product.category || 'Chưa phân loại'}
                   </span>
                 </div>
 
-                <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{product.name}</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>Mã SKU: <strong>{product.sku}</strong></p>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent-primary)', marginBottom: '1.5rem' }}>
+                <h3 className="text-title" style={{ fontSize: '1.35rem', marginBottom: '0.4rem' }}>{product.name}</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>Mã SKU: <strong style={{ color: 'var(--accent-primary)' }}>{product.sku}</strong></p>
+                <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'var(--accent-primary)', marginBottom: '1.5rem' }}>
                   {Number(product.price).toLocaleString('vi-VN')} VNĐ
                 </div>
                 
-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginBottom: '1.5rem' }}>
-                  <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Thông tin Kho:</h4>
+                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginBottom: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Thông tin Kho:</h4>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span>Số lượng tồn kho:</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Số lượng tồn kho:</span>
                     {(() => {
                       const isLow = stock < (product.minStockLevel || 20);
                       const color = isLow ? 'var(--danger)' : 'var(--text-primary)';
                       return (
                         <span style={{ fontWeight: 700, color }}>
-                          {stock} {product.unit || 'món'}
+                          {stock} {product.unit || 'Chiếc'}
                           {isLow && (
-                            <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px', backgroundColor: 'var(--danger-light)', color: 'var(--danger)', fontWeight: 600 }}>
+                            <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', fontWeight: 600 }}>
                               Thiếu hàng
                             </span>
                           )}
@@ -268,22 +304,30 @@ const ProductDetails = () => {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Ngưỡng báo thiếu (Min):</span>
-                    <strong>{product.minStockLevel || 20} món</strong>
+                    <span style={{ color: 'var(--text-secondary)' }}>Ngưỡng báo thiếu (Min):</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{product.minStockLevel || 20} {product.unit || 'Chiếc'}</strong>
                   </div>
                 </div>
 
                 {product.description && (
                   <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginBottom: '1.5rem' }}>
-                    <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Mô tả sản phẩm:</h4>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>{product.description}</p>
+                    <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Mô tả sản phẩm:</h4>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5', margin: 0 }}>{product.description}</p>
                   </div>
                 )}
 
                 {user?.role !== 'Staff' && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={startEditing}>Chỉnh Sửa</button>
-                    <button className="btn btn-danger" style={{ flex: 1 }} onClick={handleDelete}>Xóa</button>
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                    <button className="btn btn-primary" style={{ flex: 1, gap: '6px', justifyContent: 'center' }} onClick={startEditing}>
+                      <Edit2 size={16} /> Chỉnh Sửa
+                    </button>
+                    <button 
+                      className="btn" 
+                      style={{ flex: 1, background: '#ef4444', color: '#ffffff', border: 'none', gap: '6px', justifyContent: 'center', fontWeight: 600 }}
+                      onClick={handleDelete}
+                    >
+                      <Trash2 size={16} /> Xóa
+                    </button>
                   </div>
                 )}
               </>
@@ -296,10 +340,10 @@ const ProductDetails = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             <EoqCard product={product} forecast={forecast} />
 
-            <div className="card">
+            <div className="glass-card" style={{ padding: '1.75rem', borderRadius: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
                 <TrendingUp size={20} color="var(--accent-primary)" />
-                <h3 style={{ fontSize: '1.1rem', margin: 0 }}>Dự Báo Nhu Cầu Tồn Kho (AI Demand Forecast)</h3>
+                <h3 className="text-subtitle" style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700 }}>Dự Báo Nhu Cầu Tồn Kho (AI Demand Forecast)</h3>
               </div>
 
               {forecast && forecast.length > 0 ? (

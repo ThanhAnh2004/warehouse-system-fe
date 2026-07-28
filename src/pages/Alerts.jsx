@@ -142,7 +142,21 @@ const Alerts = () => {
                     </span>
                   )}
                 </div>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{alert.message}</p>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                  {(() => {
+                    const msg = alert.message || '';
+                    if (msg.includes('has fallen below the minimum stock level')) {
+                      return `Sản phẩm ${alert.productName || ''} đã giảm xuống dưới mức tồn kho tối thiểu (Hiện tại: ${alert.currentStock} / Tối thiểu: ${alert.threshold}).`;
+                    }
+                    if (msg.includes('is running out of stock!')) {
+                      return `Sản phẩm ${alert.productName || ''} sắp hết hàng trong kho! (Số lượng hiện tại: ${alert.currentStock}).`;
+                    }
+                    if (msg.includes('has exceeded the maximum stock level')) {
+                      return `Sản phẩm ${alert.productName || ''} đã vượt quá mức tồn kho tối đa (Hiện tại: ${alert.currentStock} / Tối đa: ${alert.threshold}).`;
+                    }
+                    return msg;
+                  })()}
+                </p>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                   {alert.createdAt ? new Date(alert.createdAt).toLocaleString('vi-VN') : ''}
                 </span>

@@ -45,10 +45,28 @@
 
 .sidebar-nav {
   flex: 1;
-  padding: 1.5rem 1rem;
+  padding: 1.25rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
+  overflow-y: auto;
+}
+
+.nav-section-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #7a889b;
+  margin: 1.1rem 0.5rem 0.35rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  user-select: none;
+}
+
+.nav-section-title:first-of-type {
+  margin-top: 0.2rem;
 }
 
 .nav-item {

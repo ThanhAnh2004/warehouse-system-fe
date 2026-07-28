@@ -263,7 +263,13 @@ const WarehouseMap = () => {
 
           {putawayResult && (
             <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>
-              🎯 Vị trí tối ưu: <b>Kệ {putawayResult.suggestedLocation}</b> ({putawayResult.reason})
+              🎯 Vị trí tối ưu: <b>Kệ {putawayResult.suggestedLocation}</b> ({
+                putawayResult.reason
+                  ?.replace(/ZONE-ACCESSORIES/g, 'Khu Linh Kiện & Phụ Kiện')
+                  ?.replace(/ZONE-HIGH-VAL/g, 'Khu Hàng Giá Trị Cao')
+                  ?.replace(/ZONE-LARGE-APPLIANCE/g, 'Khu Điện Tử Cỡ Lớn')
+                  ?.replace(/ZONE-ESD-TEMP/g, 'Khu Chống Tĩnh Điện ESD')
+              })
             </div>
           )}
         </div>

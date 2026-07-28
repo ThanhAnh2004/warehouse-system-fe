@@ -5,6 +5,15 @@ import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell
 import apiClient from '../api/client';
 import './Layout.css';
 
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${cleanBaseUrl}${cleanUrl}`;
+};
+
 const Layout = () => {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -75,30 +84,36 @@ const Layout = () => {
         </div>
         
         <nav className="sidebar-nav">
+          {/* Nhóm 1: Tổng Quan */}
           {user?.role !== 'Staff' && (
-            <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <LayoutDashboard size={20} />
-              <span>Trang chủ</span>
-            </NavLink>
+            <>
+              <div className="nav-section-title">Tổng Quan</div>
+              <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <LayoutDashboard size={20} />
+                <span>Trang chủ</span>
+              </NavLink>
+            </>
           )}
-          
+
+          {/* Nhóm 2: Vận Hành Kho hàng */}
+          <div className="nav-section-title">Vận Hành Kho Hàng</div>
           <NavLink to="/inventory" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Package size={20} />
             <span>Quản lý Tồn kho</span>
           </NavLink>
-
           <NavLink to="/transactions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <ArrowLeftRight size={20} />
             <span>Lịch sử Giao dịch</span>
           </NavLink>
-
           <NavLink to="/adjustments" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <ClipboardList size={20} />
             <span>Kiểm kê & Điều chỉnh</span>
           </NavLink>
 
+          {/* Nhóm 3: Sơ Đồ & Vị Trí Kệ Kho */}
           {(user?.role === 'Admin' || user?.role === 'Manager') && (
             <>
+              <div className="nav-section-title">Mặt Bằng & Kệ Kho</div>
               <NavLink to="/warehouse-map" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Map size={20} />
                 <span>Sơ đồ Kệ kho</span>
@@ -110,25 +125,10 @@ const Layout = () => {
             </>
           )}
 
-          {user?.role === 'Admin' && (
-            <>
-              <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Users size={20} />
-                <span>Quản lý Người dùng</span>
-              </NavLink>
-              <NavLink to="/role-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Shield size={20} />
-                <span>Phân quyền Vai trò</span>
-              </NavLink>
-              <NavLink to="/system-health" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Activity size={20} />
-                <span>Giám sát Hệ thống</span>
-              </NavLink>
-            </>
-          )}
-
+          {/* Nhóm 4: Thông Báo & Báo Cáo */}
           {(user?.role === 'Admin' || user?.role === 'Manager') && (
             <>
+              <div className="nav-section-title">Thông Báo & Báo Cáo</div>
               <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <FileText size={20} />
                 <span>Báo cáo & Thống kê</span>
@@ -144,11 +144,34 @@ const Layout = () => {
               </NavLink>
             </>
           )}
+
+          {/* Nhóm 5: Quản Trị Hệ Thống (Dành cho Admin) */}
+          {user?.role === 'Admin' && (
+            <>
+              <div className="nav-section-title">Quản Trị Hệ Thống</div>
+              <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Users size={20} />
+                <span>Quản lý Người dùng</span>
+              </NavLink>
+              <NavLink to="/role-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Shield size={20} />
+                <span>Phân quyền Vai trò</span>
+              </NavLink>
+              <NavLink to="/system-health" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Activity size={20} />
+                <span>Giám sát Hệ thống</span>
+              </NavLink>
+            </>
+          )}
         </nav>
 
         <div className="sidebar-footer">
           <div className="user-info" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }} title="Tài khoản của tôi">
-            <div className="avatar">{user?.fullname?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase()}</div>
+            {getImageUrl(user?.avatarUrl) ? (
+              <img src={getImageUrl(user?.avatarUrl)} alt="Avatar" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent-primary)' }} />
+            ) : (
+              <div className="avatar">{user?.fullname?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase()}</div>
+            )}
             <div className="user-details">
               <span className="username" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }} title={user?.fullname || user?.email}>
                 {user?.fullname || user?.email}
@@ -248,7 +271,21 @@ const Layout = () => {
                               </button>
                             </div>
                           </div>
-                          <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>{notif.message}</p>
+                          <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>
+                            {(() => {
+                              const msg = notif.message || '';
+                              if (msg.includes('has fallen below the minimum stock level')) {
+                                return `Sản phẩm ${notif.productName || ''} đã giảm xuống dưới mức tồn kho tối thiểu (Hiện tại: ${notif.currentStock} / Tối thiểu: ${notif.threshold}).`;
+                              }
+                              if (msg.includes('is running out of stock!')) {
+                                return `Sản phẩm ${notif.productName || ''} sắp hết hàng trong kho! (Số lượng hiện tại: ${notif.currentStock}).`;
+                              }
+                              if (msg.includes('has exceeded the maximum stock level')) {
+                                return `Sản phẩm ${notif.productName || ''} đã vượt quá mức tồn kho tối đa (Hiện tại: ${notif.currentStock} / Tối đa: ${notif.threshold}).`;
+                              }
+                              return msg;
+                            })()}
+                          </p>
                         </div>
                       ))
                     )}

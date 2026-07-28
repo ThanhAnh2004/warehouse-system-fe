@@ -4,6 +4,19 @@ import { AuthContext } from '../context/AuthContext';
 import { Shield, Save, Lock, CheckCircle2, AlertTriangle, Key, Plus, Trash2, Users, Edit } from 'lucide-react';
 import './RoleManagement.css';
 
+const CATEGORY_NAMES = {
+  users: 'QUẢN LÝ NGƯỜI DÙNG & VAI TRÒ',
+  products: 'QUẢN LÝ DANH MỤC SẢN PHẨM',
+  stock: 'QUẢN LÝ TỒN KHO THỰC TẾ',
+  adjustments: 'KIỂM KÊ & ĐIỀU CHỈNH KHO',
+  transactions: 'LỊCH SỬ GIAO DỊCH KHO',
+  locations: 'SƠ ĐỒ & DANH MỤC KỆ KHO',
+  reports: 'BÁO CÁO & THỐNG KÊ DOANH THU',
+  forecast: 'DỰ BÁO NHU CẦU & CÔNG THỨC AI',
+  alerts: 'CẢNH BÁO KHO HÀNG & HẾT HÀNG',
+  system: 'GIÁM SÁT HỆ THỐNG & LOGS',
+};
+
 const RoleManagement = () => {
   const { user } = useContext(AuthContext);
   const [roles, setRoles] = useState([]);
@@ -283,7 +296,7 @@ const RoleManagement = () => {
                 <div key={groupName} className="permission-group-section">
                   <h4 className="group-category-title">
                     <Key size={16} />
-                    <span>Quản Lý {groupName.toUpperCase()}</span>
+                    <span>{CATEGORY_NAMES[groupName] || `QUẢN LÝ ${groupName.toUpperCase()}`}</span>
                   </h4>
                   <div className="permission-items-grid">
                     {groupedPermissions[groupName].map((perm) => {
