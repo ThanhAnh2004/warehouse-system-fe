@@ -4,6 +4,19 @@ import { AuthContext } from '../context/AuthContext';
 import { Shield, Save, Lock, CheckCircle2, AlertTriangle, Key, Plus, Trash2, Users, Edit } from 'lucide-react';
 import './RoleManagement.css';
 
+const CATEGORY_NAMES = {
+  users: 'QUẢN LÝ NGƯỜI DÙNG & VAI TRÒ',
+  products: 'QUẢN LÝ DANH MỤC SẢN PHẨM',
+  stock: 'QUẢN LÝ TỒN KHO THỰC TẾ',
+  adjustments: 'KIỂM KÊ & ĐIỀU CHỈNH KHO',
+  transactions: 'LỊCH SỬ GIAO DỊCH KHO',
+  locations: 'SƠ ĐỒ & DANH MỤC KỆ KHO',
+  reports: 'BÁO CÁO & THỐNG KÊ DOANH THU',
+  forecast: 'DỰ BÁO NHU CẦU & CÔNG THỨC AI',
+  alerts: 'CẢNH BÁO KHO HÀNG & HẾT HÀNG',
+  system: 'GIÁM SÁT HỆ THỐNG & LOGS',
+};
+
 const RoleManagement = () => {
   const { user } = useContext(AuthContext);
   const [roles, setRoles] = useState([]);
@@ -29,14 +42,13 @@ const RoleManagement = () => {
       setRoles(rolesRes.data);
       setPermissions(permsRes.data);
       
-      // Default select the first role
       if (rolesRes.data.length > 0) {
         setSelectedRole(rolesRes.data[0]);
         setSelectedPermissions(rolesRes.data[0].permissions || []);
       }
     } catch (err) {
       console.error('Failed to fetch roles and permissions', err);
-      setMessage({ type: 'error', text: 'Failed to load roles and permissions data.' });
+      setMessage({ type: 'error', text: 'Không thể tải dữ liệu vai trò và quyền hạn.' });
     } finally {
       setLoading(false);
     }
@@ -53,7 +65,7 @@ const RoleManagement = () => {
   };
 
   const handlePermissionToggle = (key) => {
-    if (selectedRole?.name === 'Admin') return; // Admin has permanent full access
+    if (selectedRole?.name === 'Admin') return;
 
     if (selectedPermissions.includes(key)) {
       setSelectedPermissions(selectedPermissions.filter(k => k !== key));
@@ -65,7 +77,7 @@ const RoleManagement = () => {
   const handleSave = async () => {
     if (!selectedRole) return;
     if (selectedRole.name === 'Admin') {
-      alert('Cannot modify permissions for System Administrator (Admin).');
+      alert('Không thể thay đổi quyền hạn của Quản trị viên hệ thống (Admin).');
       return;
     }
 
@@ -76,12 +88,11 @@ const RoleManagement = () => {
         permissions: selectedPermissions
       });
       
-      // Update local roles state
       setRoles(roles.map(r => r.name === selectedRole.name ? { ...r, permissions: selectedPermissions } : r));
-      setMessage({ type: 'success', text: `Permissions for role ${selectedRole.name} updated successfully!` });
+      setMessage({ type: 'success', text: `Đã cập nhật thành công quyền hạn cho vai trò ${selectedRole.name}!` });
     } catch (err) {
       console.error(err);
-      setMessage({ type: 'error', text: 'An error occurred while saving permissions.' });
+      setMessage({ type: 'error', text: 'Có lỗi xảy ra khi lưu quyền hạn.' });
     } finally {
       setSaving(false);
     }
@@ -91,11 +102,11 @@ const RoleManagement = () => {
     e.preventDefault();
     const namePattern = /^[a-zA-Z0-9_]+$/;
     if (!newRoleName.trim()) {
-      alert('Role name cannot be empty.');
+      alert('Tên vai trò không được để trống.');
       return;
     }
     if (!namePattern.test(newRoleName)) {
-      alert('Role name must only contain alphanumeric characters and underscores (no spaces or special chars).');
+      alert('Tên vai trò chỉ được chứa chữ cái không dấu, số và dấu gạch dưới (không khoảng trắng).');
       return;
     }
     try {
@@ -110,11 +121,11 @@ const RoleManagement = () => {
         setRoles([...roles, newlyCreatedRole]);
         setNewRoleName('');
         setNewRoleDesc('');
-        setMessage({ type: 'success', text: `Role "${newlyCreatedRole.name}" created successfully!` });
+        setMessage({ type: 'success', text: `Tạo vai trò "${newlyCreatedRole.name}" thành công!` });
       }
     } catch (err) {
       console.error(err);
-      setMessage({ type: 'error', text: err.response?.data?.message || 'An error occurred while creating the new role.' });
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Có lỗi xảy ra khi tạo vai trò mới.' });
     } finally {
       setSaving(false);
     }
@@ -123,10 +134,10 @@ const RoleManagement = () => {
   const handleDeleteRole = async (name) => {
     const protectedRoles = ['Admin', 'Manager', 'Staff'];
     if (protectedRoles.includes(name)) {
-      alert('Cannot delete default system roles.');
+      alert('Không thể xóa các vai trò mặc định của hệ thống.');
       return;
     }
-    if (window.confirm(`Are you sure you want to delete the role "${name}"? This action cannot be undone.`)) {
+    if (window.confirm(`Bạn có chắc chắn muốn xóa vai trò "${name}"? Hành động này không thể hoàn tác.`)) {
       try {
         setMessage({ type: '', text: '' });
         await apiClient.delete(`/users/roles/${name}`);
@@ -141,10 +152,10 @@ const RoleManagement = () => {
             setSelectedPermissions([]);
           }
         }
-        setMessage({ type: 'success', text: `Role "${name}" deleted successfully!` });
+        setMessage({ type: 'success', text: `Đã xóa vai trò "${name}" thành công!` });
       } catch (err) {
         console.error(err);
-        setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to delete role.' });
+        setMessage({ type: 'error', text: err.response?.data?.message || 'Xóa vai trò thất bại.' });
       }
     }
   };
@@ -162,21 +173,20 @@ const RoleManagement = () => {
         setRoles(roles.map(r => r.name === editingRole.name ? { ...r, description: editRoleDesc.trim() } : r));
         setEditingRole(null);
         setEditRoleDesc('');
-        setMessage({ type: 'success', text: `Role "${editingRole.name}" description updated successfully!` });
+        setMessage({ type: 'success', text: `Đã cập nhật mô tả cho vai trò "${editingRole.name}" thành công!` });
       }
     } catch (err) {
       console.error(err);
-      setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to update role description.' });
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Cập nhật mô tả thất bại.' });
     } finally {
       setSaving(false);
     }
   };
 
-  // Group permissions by category for a cleaner UI layout
   const getGroupedPermissions = () => {
     const groups = {};
     permissions.forEach(p => {
-      const category = p.key.split(':')[0] || 'Other';
+      const category = p.key.split(':')[0] || 'Phân Quyền Khác';
       if (!groups[category]) {
         groups[category] = [];
       }
@@ -189,7 +199,7 @@ const RoleManagement = () => {
     return (
       <div className="loading-container">
         <div className="spinner"></div>
-        <p>Loading configuration data...</p>
+        <p>Đang tải cấu hình phân quyền...</p>
       </div>
     );
   }
@@ -198,11 +208,11 @@ const RoleManagement = () => {
   const isAdminRole = selectedRole?.name === 'Admin';
 
   return (
-    <div className="role-management-container">
+    <div className="role-management-container animate-slide-up">
       <div className="page-header">
         <div>
-          <h2 className="text-title">Access Control Configuration</h2>
-          <p className="text-subtitle">Manage and dynamically assign permissions to user roles</p>
+          <h2 className="text-title">Cấu Hình Phân Quyền & Vai Trò (RBAC)</h2>
+          <p className="text-subtitle">Quản lý và gán quyền chi tiết cho từng vai trò người dùng trong hệ thống</p>
         </div>
         <Shield size={36} className="header-icon" />
       </div>
@@ -215,7 +225,7 @@ const RoleManagement = () => {
           style={{ borderRadius: '20px', padding: '0.4rem 1.2rem', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
         >
           <Shield size={16} />
-          Permissions Matrix
+          Ma Trận Phân Quyền
         </button>
         <button
           className={`btn ${activeTab === 'roles' ? 'btn-primary' : 'btn-outline'}`}
@@ -223,7 +233,7 @@ const RoleManagement = () => {
           style={{ borderRadius: '20px', padding: '0.4rem 1.2rem', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
         >
           <Users size={16} />
-          Roles List
+          Danh Sách Vai Trò
         </button>
       </div>
 
@@ -238,7 +248,7 @@ const RoleManagement = () => {
         <div className="role-management-grid">
           {/* Left Side: Role Selector */}
           <div className="glass-card role-selector-card">
-            <h3 className="card-title">System Roles</h3>
+            <h3 className="card-title">Vai Trò Hệ Thống</h3>
             <div className="role-list">
               {roles.map((role) => (
                 <button
@@ -248,10 +258,10 @@ const RoleManagement = () => {
                 >
                   <div className="role-btn-info">
                     <span className="role-name">{role.name}</span>
-                    <span className="role-desc">{role.description || 'No description'}</span>
+                    <span className="role-desc">{role.description || 'Chưa có mô tả'}</span>
                   </div>
                   <div className="role-badge">
-                    {(role.permissions || []).length} perms
+                    {(role.permissions || []).length} quyền
                   </div>
                 </button>
               ))}
@@ -262,11 +272,11 @@ const RoleManagement = () => {
           <div className="glass-card permissions-matrix-card">
             <div className="matrix-header">
               <div>
-                <h3 className="card-title">Detailed Permissions - {selectedRole?.name}</h3>
+                <h3 className="card-title">Chi Tiết Quyền Hạn - Vai Trò: {selectedRole?.name}</h3>
                 <p className="card-subtitle">
                   {isAdminRole 
-                    ? 'The Admin role has full system privileges and cannot be modified.'
-                    : `Select functions permitted for the ${selectedRole?.name} role`}
+                    ? 'Vai trò Quản trị viên (Admin) có toàn bộ quyền hạn trong hệ thống và không thể thay đổi.'
+                    : `Tích chọn các chức năng cho phép vai trò ${selectedRole?.name} thực hiện`}
                 </p>
               </div>
               {!isAdminRole && (
@@ -276,7 +286,7 @@ const RoleManagement = () => {
                   disabled={saving}
                 >
                   <Save size={18} />
-                  {saving ? 'Saving...' : 'Save Permissions'}
+                  {saving ? 'Đang lưu...' : 'Lưu Phân Quyền'}
                 </button>
               )}
             </div>
@@ -286,7 +296,7 @@ const RoleManagement = () => {
                 <div key={groupName} className="permission-group-section">
                   <h4 className="group-category-title">
                     <Key size={16} />
-                    <span>{groupName.toUpperCase()} Management</span>
+                    <span>{CATEGORY_NAMES[groupName] || `QUẢN LÝ ${groupName.toUpperCase()}`}</span>
                   </h4>
                   <div className="permission-items-grid">
                     {groupedPermissions[groupName].map((perm) => {
@@ -302,7 +312,7 @@ const RoleManagement = () => {
                               type="checkbox"
                               checked={isChecked}
                               disabled={isAdminRole}
-                              onChange={() => {}} // Controlled by div onClick
+                              onChange={() => {}}
                             />
                           </div>
                           <div className="perm-details">
@@ -326,34 +336,34 @@ const RoleManagement = () => {
           <div className="glass-card role-selector-card" style={{ padding: '1.5rem', height: 'fit-content' }}>
             <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.15rem' }}>
               <Plus size={18} color="var(--accent-primary)" />
-              Create New Role
+              Thêm Vai Trò Mới
             </h3>
             <form onSubmit={handleCreateRole} style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Role Name (no spaces, no accents)</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Tên Vai Trò (không khoảng trắng, không dấu)</label>
                 <input
                   required
                   type="text"
                   className="form-input"
                   value={newRoleName}
                   onChange={e => setNewRoleName(e.target.value)}
-                  placeholder="e.g. Accountant"
+                  placeholder="Ví dụ: Accountant"
                   style={{ width: '100%', padding: '0.6rem 0.8rem' }}
                 />
               </div>
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Role Description</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Mô Tả Vai Trò</label>
                 <textarea
                   className="form-input"
                   rows="3"
                   value={newRoleDesc}
                   onChange={e => setNewRoleDesc(e.target.value)}
-                  placeholder="e.g. Accountant managing invoices and stock"
+                  placeholder="Ví dụ: Kế toán quản lý hóa đơn và kiểm kê kho"
                   style={{ resize: 'none', width: '100%', padding: '0.6rem 0.8rem' }}
                 />
               </div>
               <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', padding: '0.6rem' }} disabled={saving}>
-                {saving ? 'Creating...' : 'Create Role'}
+                {saving ? 'Đang tạo...' : 'Tạo Vai Trò'}
               </button>
             </form>
           </div>
@@ -362,17 +372,17 @@ const RoleManagement = () => {
           <div className="glass-card permissions-matrix-card" style={{ padding: '1.5rem', minHeight: 'fit-content' }}>
             <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.15rem', marginBottom: '1.25rem' }}>
               <Users size={18} color="var(--accent-primary)" />
-              Current Roles
+              Danh Sách Vai Trò Hiện Có
             </h3>
             <div className="table-container" style={{ overflowX: 'auto' }}>
               <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
-                    <th style={{ padding: '0.75rem 1rem', width: '45px', textAlign: 'center' }}>#</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Role Name</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Description</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Permissions</th>
-                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Actions</th>
+                    <th style={{ padding: '0.75rem 1rem', width: '45px', textAlign: 'center' }}>STT</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Tên Vai Trò</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Mô Tả</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Số Quyền</th>
+                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -397,16 +407,16 @@ const RoleManagement = () => {
                               color: 'var(--text-secondary)',
                               fontWeight: 600
                             }}>
-                              Default
+                              Mặc định
                             </span>
                           )}
                         </td>
                         <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                          {role.description || 'No description'}
+                          {role.description || 'Chưa có mô tả'}
                         </td>
                         <td style={{ padding: '1rem' }}>
                           <span className="role-badge" style={{ display: 'inline-block' }}>
-                            {(role.permissions || []).length} perms
+                            {(role.permissions || []).length} quyền
                           </span>
                         </td>
                         <td style={{ padding: '1rem', textAlign: 'center' }}>
@@ -424,7 +434,7 @@ const RoleManagement = () => {
                                 setEditingRole(role);
                                 setEditRoleDesc(role.description || '');
                               }}
-                              title="Edit Role Description"
+                              title="Sửa mô tả vai trò"
                             >
                               <Edit size={14} />
                             </button>
@@ -440,7 +450,7 @@ const RoleManagement = () => {
                               }}
                               onClick={() => handleDeleteRole(role.name)}
                               disabled={isSystemRole}
-                              title={isSystemRole ? "Cannot delete default system roles" : "Delete Role"}
+                              title={isSystemRole ? "Không thể xóa vai trò mặc định" : "Xóa vai trò"}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -460,10 +470,10 @@ const RoleManagement = () => {
       {editingRole && (
         <div className="modal-backdrop">
           <div className="modal-content glass-card animate-slide-up" style={{ width: '100%', maxWidth: '500px' }}>
-            <h3 className="text-title" style={{ fontSize: '1.25rem' }}>Edit Role Description: {editingRole.name}</h3>
+            <h3 className="text-title" style={{ fontSize: '1.25rem' }}>Sửa Mô Tả Vai Trò: {editingRole.name}</h3>
             <form onSubmit={handleUpdateRoleDesc} style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="form-group">
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Description</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>Mô Tả Vai Trò</label>
                 <textarea
                   required
                   className="form-input"
@@ -474,9 +484,9 @@ const RoleManagement = () => {
                 />
               </div>
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setEditingRole(null)}>Cancel</button>
+                <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setEditingRole(null)}>Hủy Bỏ</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Changes'}
+                  {saving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
                 </button>
               </div>
             </form>

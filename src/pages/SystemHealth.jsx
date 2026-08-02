@@ -5,8 +5,8 @@ import { Server, Database, Cpu, Box, Radio, RefreshCw, CheckCircle2, XCircle, Ac
 const CATEGORY_META = {
   gateway: { label: 'API Gateway', icon: Radio },
   microservice: { label: 'Microservice', icon: Server },
-  python: { label: 'AI / Python Service', icon: Cpu },
-  database: { label: 'Database', icon: Database },
+  python: { label: 'Dịch Vụ AI Python', icon: Cpu },
+  database: { label: 'Cơ Sở Dữ Liệu', icon: Database },
   broker: { label: 'Message Broker', icon: Box },
 };
 
@@ -28,7 +28,7 @@ const SystemHealth = () => {
       if (busRes?.data) setBusData(busRes.data);
     } catch (err) {
       console.error('Failed to fetch system health:', err);
-      setError(err.response?.data?.message || 'Could not load system health.');
+      setError(err.response?.data?.message || 'Không thể lấy dữ liệu giám sát hệ thống.');
     } finally {
       setLoading(false);
     }
@@ -42,26 +42,26 @@ const SystemHealth = () => {
 
   const handleRequeueDlq = async (dlqName, targetQueue) => {
     try {
-      setActionMessage(`Requeuing messages from ${dlqName}...`);
+      setActionMessage(`Đang đẩy lại tin nhắn từ ${dlqName}...`);
       const res = await apiClient.post('/system/message-bus/requeue-dlq', { dlqName, targetQueue });
       alert(res.data.message);
       fetchHealth();
     } catch (err) {
-      alert('Error requeuing DLQ: ' + (err.response?.data?.message || err.message));
+      alert('Lỗi khi Replay DLQ: ' + (err.response?.data?.message || err.message));
     } finally {
       setActionMessage('');
     }
   };
 
   const handlePurgeQueue = async (queueName) => {
-    if (!window.confirm(`Are you sure you want to purge all pending messages in queue [${queueName}]?`)) return;
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa toàn bộ tin nhắn lỗi trong hàng đợi [${queueName}]?`)) return;
     try {
-      setActionMessage(`Purging queue ${queueName}...`);
+      setActionMessage(`Đang xóa dọn dẹp hàng đợi ${queueName}...`);
       const res = await apiClient.post('/system/message-bus/purge-queue', { queueName });
       alert(res.data.message);
       fetchHealth();
     } catch (err) {
-      alert('Error purging queue: ' + (err.response?.data?.message || err.message));
+      alert('Lỗi khi dọn dẹp hàng đợi: ' + (err.response?.data?.message || err.message));
     } finally {
       setActionMessage('');
     }
@@ -75,16 +75,16 @@ const SystemHealth = () => {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Activity size={28} color="var(--accent-primary)" />
-          <h1 className="text-title" style={{ marginBottom: 0 }}>System Monitoring & Message Bus Control</h1>
+          <h1 className="text-title" style={{ marginBottom: 0 }}>Giám Sát Hạ Tầng & Quản Lý Message Bus</h1>
         </div>
         <button className="btn btn-outline" onClick={fetchHealth} style={{ background: 'var(--bg-glass)' }}>
-          <RefreshCw size={16} /> Refresh Status
+          <RefreshCw size={16} /> Làm Mới Trạng Thái
         </button>
       </div>
 
       {loading ? (
         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-          Checking all microservices & RabbitMQ message queues...
+          Đang kiểm tra toàn bộ Microservices & Hàng đợi RabbitMQ...
         </div>
       ) : error ? (
         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--danger)', padding: '2rem' }}>
@@ -96,9 +96,9 @@ const SystemHealth = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
             <div className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Overall System</p>
+                <p className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Trạng Thái Toàn Hệ Thống</p>
                 <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: allHealthy ? 'var(--success)' : 'var(--danger)' }}>
-                  {allHealthy ? 'Operational' : 'Degraded'}
+                  {allHealthy ? 'Hoạt Động Tốt' : 'Có Sự Cố'}
                 </h3>
               </div>
               <div style={{ padding: '1rem', borderRadius: '50%', background: allHealthy ? 'var(--success-light)' : 'var(--danger-light)', color: allHealthy ? 'var(--success)' : 'var(--danger)' }}>
@@ -107,7 +107,7 @@ const SystemHealth = () => {
             </div>
             <div className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Services Up</p>
+                <p className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Dịch Vụ Đang Chạy (UP)</p>
                 <h3 style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--success)' }}>{summary.up}<span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}> / {summary.total}</span></h3>
               </div>
               <div style={{ padding: '1rem', borderRadius: '50%', background: 'var(--success-light)', color: 'var(--success)' }}>
@@ -116,7 +116,7 @@ const SystemHealth = () => {
             </div>
             <div className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Services Down</p>
+                <p className="text-subtitle" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Dịch Vụ Bị Sập (DOWN)</p>
                 <h3 style={{ fontSize: '2rem', fontWeight: 700, color: summary.down > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>{summary.down}</h3>
               </div>
               <div style={{ padding: '1rem', borderRadius: '50%', background: 'var(--danger-light)', color: 'var(--danger)' }}>
@@ -126,7 +126,7 @@ const SystemHealth = () => {
           </div>
 
           {/* Microservices Grid */}
-          <h2 className="text-title" style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Infrastructure Services Status</h2>
+          <h2 className="text-title" style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Danh Sách Các Dịch Vụ Hạ Tầng (Microservices)</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
             {data.services.map((svc) => {
               const meta = CATEGORY_META[svc.category] || CATEGORY_META.microservice;
@@ -153,12 +153,12 @@ const SystemHealth = () => {
                       }}
                     >
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isUp ? 'var(--success)' : 'var(--danger)' }}></span>
-                      {isUp ? 'UP' : 'DOWN'}
+                      {isUp ? 'ĐANG CHẠY' : 'BỊ ĐẮT'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                     <span>{svc.host}:{svc.port}</span>
-                    <span>{svc.latencyMs} ms</span>
+                    <span>Độ trễ: {svc.latencyMs} ms</span>
                   </div>
                 </div>
               );
@@ -171,7 +171,7 @@ const SystemHealth = () => {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Box size={22} color="var(--accent-primary)" />
-                  <h3 className="text-title" style={{ fontSize: '1.3rem', margin: 0 }}>Message Bus & Error Recovery Management</h3>
+                  <h3 className="text-title" style={{ fontSize: '1.3rem', margin: 0 }}>Quản Lý Message Bus & Xử Lý Sự Cố Hàng Đợi (DLQ)</h3>
                 </div>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
                   Quản lý hàng đợi RabbitMQ, theo dõi lỗi Dead Letter Queue (DLQ) & khôi phục tin nhắn sự cố.
@@ -185,7 +185,7 @@ const SystemHealth = () => {
                 className="btn btn-outline"
                 style={{ background: 'var(--bg-glass)', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
               >
-                <ExternalLink size={16} /> Open RabbitMQ UI (Port 15672)
+                <ExternalLink size={16} /> Mở RabbitMQ UI (Port 15672)
               </a>
             </div>
 
@@ -200,13 +200,13 @@ const SystemHealth = () => {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Service Name</th>
-                    <th>Message Queue</th>
-                    <th>Consumers Active</th>
-                    <th>Pending Messages</th>
-                    <th>DLQ Errors (Dead Letter)</th>
-                    <th>Queue Status</th>
-                    <th style={{ textAlign: 'center' }}>Error Management Actions</th>
+                    <th>Tên Dịch Vụ</th>
+                    <th>Tên Hàng Đợi (Queue)</th>
+                    <th>Kết Nối Lắng Nghe</th>
+                    <th>Tin Nhắn Đang Chờ</th>
+                    <th>Lỗi Hàng Đợi Thư Chết (DLQ)</th>
+                    <th>Trạng Thái Queue</th>
+                    <th style={{ textAlign: 'center' }}>Thao Tác Xử Lý Lỗi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,17 +222,17 @@ const SystemHealth = () => {
                         </td>
                         <td>
                           <span className={`badge ${isOnline ? 'badge-success' : 'badge-warning'}`}>
-                            {q.consumers} Active {q.consumers === 1 ? 'Consumer' : 'Consumers'}
+                            {q.consumers} Kết Nối Hoạt Động
                           </span>
                         </td>
                         <td style={{ fontWeight: 700 }}>{q.pendingMessages}</td>
                         <td>
                           {hasErrors ? (
                             <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <AlertTriangle size={14} /> {q.dlqErrorCount} Error Messages
+                              <AlertTriangle size={14} /> {q.dlqErrorCount} Tin nhắn lỗi
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>0 Errors (Clean)</span>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>0 Lỗi (Sạch)</span>
                           )}
                         </td>
                         <td>
@@ -243,7 +243,7 @@ const SystemHealth = () => {
                               color: hasErrors ? 'var(--danger)' : isOnline ? 'var(--success)' : 'var(--warning)',
                             }}
                           >
-                            {hasErrors ? 'HAS ERRORS' : isOnline ? 'ACTIVE' : 'NO CONSUMER'}
+                            {hasErrors ? 'CÓ LỖI DLQ' : isOnline ? 'HOẠT ĐỘNG' : 'MẤT KẾT NỐI'}
                           </span>
                         </td>
                         <td style={{ textAlign: 'center' }}>
@@ -279,9 +279,9 @@ const SystemHealth = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <ShieldCheck size={16} color="var(--success)" />
-                <span>Dead Letter Exchange: <code>amq.direct</code> | Auto-Reconnect: Enabled (5s)</span>
+                <span>Dead Letter Exchange: <code>amq.direct</code> | Tự động kết nối lại: Đang bật (5s)</span>
               </div>
-              <span>Last checked: {new Date().toLocaleTimeString()} · Auto-refreshes every 8s</span>
+              <span>Kiểm tra lần cuối: {new Date().toLocaleTimeString('vi-VN')} · Tự động làm mới mỗi 8s</span>
             </div>
           </div>
         </>

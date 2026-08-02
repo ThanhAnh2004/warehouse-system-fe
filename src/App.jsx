@@ -15,6 +15,8 @@ import Alerts from './pages/Alerts';
 import SystemHealth from './pages/SystemHealth';
 import Profile from './pages/Profile';
 import RoleManagement from './pages/RoleManagement';
+import WarehouseMap from './pages/WarehouseMap';
+import LocationManagement from './pages/LocationManagement';
 
 const App = () => {
   return (
@@ -22,17 +24,20 @@ const App = () => {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
-          
+
           <Route element={<Layout />}>
             <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager']} />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/alerts" element={<Alerts />} />
+              <Route path="/warehouse-map" element={<WarehouseMap />} />
+              <Route path="/locations" element={<LocationManagement />} />
             </Route>
-            
+
             <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']} />}>
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/inventory/:sku" element={<ProductDetails />} />
+              <Route path="/products/:sku" element={<ProductDetails />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/adjustments" element={<StockAdjustment />} />
               <Route path="/profile" element={<Profile />} />
