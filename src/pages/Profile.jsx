@@ -86,11 +86,12 @@ const Profile = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      if (response.data.success || response.data.data) {
+      if (response.data) {
         const updatedData = response.data.data || response.data;
+        const newAvatarUrl = updatedData?.avatarUrl || profileData?.avatarUrl;
         updateUser({
           fullname: editForm.fullname,
-          avatarUrl: updatedData.avatarUrl || profileData?.avatarUrl
+          avatarUrl: newAvatarUrl
         });
         setShowEditModal(false);
         setAvatarFile(null);

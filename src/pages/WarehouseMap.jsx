@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import apiClient from '../api/client';
 import { 
   Map, Box, Search, RefreshCw, ArrowRightLeft, Sparkles, 
-  Truck, Cpu, Compass, LayoutGrid, Laptop, Tv, Keyboard, Shield, Zap, Info, Layers, Table, PlusCircle
+  Truck, Cpu, Compass, LayoutGrid, Laptop, Tv, Keyboard, Shield, Zap, Info, Layers, Table, PlusCircle, Package, X, AlertCircle
 } from 'lucide-react';
 
 const ZONE_CONFIG = {
@@ -10,6 +11,15 @@ const ZONE_CONFIG = {
   'ZONE-LARGE-APPLIANCE': { labelVi: 'Điện Tử Cỡ Lớn', name: 'Khu Điện Tử Cỡ Lớn (Smart TV, Loa)', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)', desc: 'Dãy B (B01 - B08): Khu Luân Chuyển Vừa - Smart TV, Loa, Máy chiếu' },
   'ZONE-ACCESSORIES': { labelVi: 'Linh Kiện & Phụ Kiện', name: 'Khu Linh Kiện & Phụ Kiện (High-Bay)', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)', desc: 'Dãy C (C01 - C04): Khu Lưu Trữ Mật Độ Cao - Bàn phím, Chuột, RAM/SSD' },
   'ZONE-ESD-TEMP': { labelVi: 'Chống Tĩnh Điện ESD', name: 'Khu Chống Tĩnh Điện & Bán Dẫn (Phòng ESD)', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.12)', desc: 'Dãy D (D01 - D02): Phòng ESD kiểm soát độ ẩm 45% (Chipset, Board)' },
+};
+
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${cleanBaseUrl}${cleanUrl}`;
 };
 
 const WarehouseMap = () => {
@@ -40,10 +50,28 @@ const WarehouseMap = () => {
   const [putawayResult, setPutawayResult] = useState(null);
   const [allProducts, setAllProducts] = useState([]);
 
+  // Unallocated products state & modal
+  const [unallocatedProducts, setUnallocatedProducts] = useState([]);
+  const [showUnallocatedModal, setShowUnallocatedModal] = useState(false);
+  const [unallocatedLoading, setUnallocatedLoading] = useState(false);
+
   useEffect(() => {
     fetchLocations();
     fetchProducts();
+    fetchUnallocatedProducts();
   }, []);
+
+  const fetchUnallocatedProducts = async () => {
+    try {
+      setUnallocatedLoading(true);
+      const res = await apiClient.get('/inventory/locations/unallocated');
+      setUnallocatedProducts(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch unallocated products:', err);
+    } finally {
+      setUnallocatedLoading(false);
+    }
+  };
 
   const fetchLocations = async () => {
     try {
@@ -194,7 +222,32 @@ const WarehouseMap = () => {
             </button>
           </div>
 
-          <button className="btn btn-outline" onClick={fetchLocations} style={{ background: 'var(--bg-glass)' }}>
+          <button 
+            className="btn" 
+            onClick={() => { fetchUnallocatedProducts(); setShowUnallocatedModal(true); }} 
+            style={{ 
+              background: 'rgba(234, 179, 8, 0.15)', 
+              color: '#d97706', 
+              border: '1px solid rgba(234, 179, 8, 0.4)', 
+              padding: '0.4rem 0.85rem', 
+              fontSize: '0.85rem', 
+              borderRadius: '8px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              fontWeight: 600 
+            }}
+            title="Xem danh sách sản phẩm chưa được xếp vào kệ kho"
+          >
+            <Package size={16} /> Hàng Chờ Phân Kệ
+            {unallocatedProducts.length > 0 && (
+              <span style={{ background: '#f59e0b', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.75rem', fontWeight: 700 }}>
+                {unallocatedProducts.length}
+              </span>
+            )}
+          </button>
+
+          <button className="btn btn-outline" onClick={() => { fetchLocations(); fetchUnallocatedProducts(); }} style={{ background: 'var(--bg-glass)' }}>
             <RefreshCw size={16} /> Làm mới
           </button>
         </div>
@@ -728,6 +781,152 @@ const WarehouseMap = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* UNALLOCATED PRODUCTS MODAL */}
+      {showUnallocatedModal && createPortal(
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: '280px',
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 99999,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '1.5rem',
+        }}>
+          <div className="glass-card animate-scale-up" style={{
+            width: '100%',
+            maxWidth: '880px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '1.75rem',
+            borderRadius: '16px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            border: '1px solid var(--border-color)',
+            background: 'var(--bg-secondary, #1e293b)'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ background: 'rgba(245, 158, 11, 0.15)', padding: '0.5rem', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Package size={24} color="#f59e0b" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>Sản Phẩm Đang Chờ Phân Kệ Kho</h3>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Danh sách hàng mới nhập chưa được sắp xếp vào các vị trí kệ kho thực tế (Unallocated Stock)</p>
+                </div>
+              </div>
+              <button className="btn btn-outline" style={{ padding: '0.4rem', borderRadius: '8px' }} onClick={() => setShowUnallocatedModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Sub-header Stats Bar */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+              <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tổng sản phẩm chưa xếp kệ:</span>
+                <strong style={{ fontSize: '1.1rem', color: '#f59e0b' }}>{unallocatedProducts.length} mặt hàng</strong>
+              </div>
+              <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tổng số lượng chờ cất kho:</span>
+                <strong style={{ fontSize: '1.1rem', color: 'var(--accent-primary)' }}>
+                  {unallocatedProducts.reduce((sum, p) => sum + p.unallocatedQty, 0)} {unallocatedProducts[0]?.unit || 'Chiếc'}
+                </strong>
+              </div>
+            </div>
+
+            {/* Product List Table / Card */}
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
+              {unallocatedProducts.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {unallocatedProducts.map((p) => (
+                    <div key={p.productId} style={{
+                      padding: '1rem',
+                      background: 'var(--bg-primary)',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border-color)',
+                      display: 'grid',
+                      gridTemplateColumns: '60px 2fr 1fr 1fr 150px',
+                      alignItems: 'center',
+                      gap: '1rem'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        {getImageUrl(p.imageUrl) ? (
+                          <img src={getImageUrl(p.imageUrl)} alt={p.name} style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '48px', height: '48px', background: 'var(--bg-secondary)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Box size={24} color="var(--text-secondary)" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{p.name}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.5rem', marginTop: '0.15rem' }}>
+                          <span>SKU: <b style={{ color: 'var(--accent-primary)' }}>{p.sku}</b></span>
+                          <span>| Danh mục: <b>{p.category || 'Điện tử'}</b></span>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Tổng tồn kho:</div>
+                        <strong>{p.totalStock} {p.unit}</strong>
+                      </div>
+
+                      <div>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Chờ phân kệ:</div>
+                        <span style={{
+                          background: 'rgba(245, 158, 11, 0.15)',
+                          color: '#d97706',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '12px',
+                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                          display: 'inline-block'
+                        }}>
+                          {p.unallocatedQty} {p.unit}
+                        </span>
+                      </div>
+
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', gap: '4px', justifyContent: 'center' }}
+                        onClick={() => {
+                          setPutawayProductId(p.productId);
+                          setPutawayQty(p.unallocatedQty);
+                          setShowUnallocatedModal(false);
+                          // Auto trigger AI Suggestion
+                          apiClient.get(`/inventory/locations/suggest-putaway?productId=${p.productId}&quantity=${p.unallocatedQty}`)
+                            .then(res => setPutawayResult(res.data))
+                            .catch(() => {});
+                        }}
+                      >
+                        <Sparkles size={14} /> AI Gợi Ý Kệ
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-secondary)' }}>
+                  <Package size={42} color="var(--success)" style={{ marginBottom: '0.75rem' }} />
+                  <p style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Tất cả sản phẩm đã được xếp vào các kệ kho đầy đủ!</p>
+                  <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.82rem' }}>Không có mặt hàng nào đang ở trạng thái chờ phân kệ.</p>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline" onClick={() => setShowUnallocatedModal(false)}>Đóng</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
