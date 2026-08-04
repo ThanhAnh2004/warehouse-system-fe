@@ -11,7 +11,13 @@ export const AuthProvider = ({ children }) => {
   const performLoginState = (token, refreshToken) => {
     // Decode JWT token to get user info
     const payload = JSON.parse(atob(token.split('.')[1]));
-    const userData = { email: payload.email, id: payload.sub, role: payload.role, fullname: payload.fullname };
+    const userData = { 
+      email: payload.email, 
+      id: payload.sub, 
+      role: payload.role, 
+      permissions: payload.permissions || [],
+      fullname: payload.fullname 
+    };
     
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
@@ -19,6 +25,19 @@ export const AuthProvider = ({ children }) => {
       Cookies.set('refreshToken', refreshToken, { expires: 30 }); // expires in 30 days
     }
     setUser(userData);
+
+    if (payload.sub) {
+      apiClient.get(`/users/${payload.sub}`)
+        .then(res => {
+          if (res.data && res.data.avatarUrl) {
+            const updated = { ...userData, avatarUrl: res.data.avatarUrl, fullname: res.data.fullname || userData.fullname };
+            localStorage.setItem('user', JSON.stringify(updated));
+            setUser(updated);
+          }
+        })
+        .catch(() => {});
+    }
+
     return userData;
   };
 
@@ -44,7 +63,25 @@ export const AuthProvider = ({ children }) => {
       // Attempt to load from localStorage first
       if (token && storedUser && storedUser !== "undefined") {
         try {
-          setUser(JSON.parse(storedUser));
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
+
+          // Fetch latest user profile to sync avatarUrl & fullname from backend
+          if (parsedUser.id) {
+            apiClient.get(`/users/${parsedUser.id}`)
+              .then(res => {
+                if (res.data) {
+                  const updated = {
+                    ...parsedUser,
+                    fullname: res.data.fullname || parsedUser.fullname,
+                    avatarUrl: res.data.avatarUrl || parsedUser.avatarUrl,
+                  };
+                  localStorage.setItem('user', JSON.stringify(updated));
+                  setUser(updated);
+                }
+              })
+              .catch(() => {});
+          }
         } catch (e) {
           console.error("Failed to parse stored user", e);
           localStorage.removeItem('user');

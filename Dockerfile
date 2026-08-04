@@ -1,4 +1,4 @@
-FROM node:22-alpine as build
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
@@ -13,6 +13,7 @@ RUN npm run build
 # Serve with nginx
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port 80
 EXPOSE 80

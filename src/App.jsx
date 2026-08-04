@@ -8,9 +8,15 @@ import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
 import ProductDetails from './pages/ProductDetails';
 import Transactions from './pages/Transactions';
+import StockAdjustment from './pages/StockAdjustment';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
+import Alerts from './pages/Alerts';
+import SystemHealth from './pages/SystemHealth';
 import Profile from './pages/Profile';
+import RoleManagement from './pages/RoleManagement';
+import WarehouseMap from './pages/WarehouseMap';
+import LocationManagement from './pages/LocationManagement';
 
 const App = () => {
   return (
@@ -18,22 +24,29 @@ const App = () => {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
-          
+
           <Route element={<Layout />}>
             <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager']} />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/alerts" element={<Alerts />} />
+              <Route path="/warehouse-map" element={<WarehouseMap />} />
+              <Route path="/locations" element={<LocationManagement />} />
             </Route>
-            
+
             <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']} />}>
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/inventory/:sku" element={<ProductDetails />} />
+              <Route path="/products/:sku" element={<ProductDetails />} />
               <Route path="/transactions" element={<Transactions />} />
+              <Route path="/adjustments" element={<StockAdjustment />} />
               <Route path="/profile" element={<Profile />} />
             </Route>
 
             <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
               <Route path="/users" element={<UserManagement />} />
+              <Route path="/role-management" element={<RoleManagement />} />
+              <Route path="/system-health" element={<SystemHealth />} />
             </Route>
           </Route>
         </Routes>
