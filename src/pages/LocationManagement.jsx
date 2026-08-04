@@ -25,8 +25,8 @@ const LocationManagement = () => {
   const [form, setForm] = useState({
     code: '',
     zone: 'ZONE-ACCESSORIES',
-    aisle: 'Dãy A',
-    maxCapacity: 300,
+    aisle: 'Kệ A',
+    maxCapacity: 60,
     maxWeightKg: 500,
     description: '',
   });
@@ -63,8 +63,8 @@ const LocationManagement = () => {
     setForm({
       code: '',
       zone: 'ZONE-ACCESSORIES',
-      aisle: 'Dãy A',
-      maxCapacity: 300,
+      aisle: 'Kệ A',
+      maxCapacity: 60,
       maxWeightKg: 500,
       description: '',
     });
@@ -85,16 +85,16 @@ const LocationManagement = () => {
 
   const handleSaveAdd = async (e) => {
     e.preventDefault();
-    if (!form.code.trim()) return alert('Vui lòng nhập Mã Kệ kho!');
+    if (!form.code.trim()) return alert('Vui lòng nhập Mã Tầng kho!');
 
     try {
       setSubmitting(true);
       await apiClient.post('/inventory/locations', form);
-      alert('Đã thêm Kệ kho mới thành công!');
+      alert('Đã thêm Tầng kho mới thành công!');
       setShowAddModal(false);
       fetchLocations();
     } catch (err) {
-      alert('Lỗi tạo Kệ kho: ' + (err.response?.data?.message || err.message));
+      alert('Lỗi tạo Tầng kho: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -107,11 +107,11 @@ const LocationManagement = () => {
     try {
       setSubmitting(true);
       await apiClient.patch(`/inventory/locations/${editingLoc.id}`, form);
-      alert('Đã cập nhật Kệ kho thành công!');
+      alert('Đã cập nhật Tầng kho thành công!');
       setEditingLoc(null);
       fetchLocations();
     } catch (err) {
-      alert('Lỗi cập nhật Kệ kho: ' + (err.response?.data?.message || err.message));
+      alert('Lỗi cập nhật Tầng kho: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -122,20 +122,79 @@ const LocationManagement = () => {
     try {
       setSubmitting(true);
       await apiClient.delete(`/inventory/locations/${deletingLoc.id}`);
-      alert(`Đã xóa Kệ kho [${deletingLoc.code}] thành công!`);
+      alert(`Đã xóa Tầng kho [${deletingLoc.code}] thành công!`);
       setDeletingLoc(null);
       fetchLocations();
     } catch (err) {
-      alert('Lỗi xóa Kệ kho: ' + (err.response?.data?.message || err.message));
+      alert('Lỗi xóa Tầng kho: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
   };
 
+  const normalizeText = (str) => {
+    if (!str) return '';
+    return String(str)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'd')
+      .trim();
+  };
+
+  const matchLocationSearch = (loc, query) => {
+    if (!query || !query.trim()) return true;
+
+    const normQ = normalizeText(query);
+    const code = (loc.code || '').toUpperCase();
+    const aisle = (loc.aisle || '').toUpperCase();
+    const desc = (loc.description || '').toLowerCase();
+
+    const normCode = normalizeText(code);
+    const normAisle = normalizeText(aisle);
+    const normDesc = normalizeText(desc);
+
+    // 1. Direct code/aisle/desc includes
+    if (normCode.includes(normQ) || normAisle.includes(normQ) || normDesc.includes(normQ)) return true;
+
+    // 2. Prefix matching ("Tầng A01", "Level A01", "Kệ A01", "Dãy A01")
+    const codeWithPrefix = `tang ${normCode} ke ${normCode} level ${normCode} day ${normCode}`;
+    if (codeWithPrefix.includes(normQ)) return true;
+
+    // 3. Reverse check (if search query contains the location code e.g. "xem tầng A01")
+    if (normQ.includes(normCode)) return true;
+
+    // 4. Letter + Digit combination matching (e.g. "A 01", "a-01", "A 1", "tầng A1")
+    const digitMatch = normQ.match(/\d+/);
+    const letterMatch = normQ.match(/[a-d]/i);
+
+    if (letterMatch && digitMatch) {
+      const searchLetter = letterMatch[0].toUpperCase();
+      const searchDigits = digitMatch[0];
+      const formattedDigits = searchDigits.padStart(2, '0');
+      const targetCode1 = `${searchLetter}${searchDigits}`;
+      const targetCode2 = `${searchLetter}${formattedDigits}`;
+
+      if (code === targetCode1 || code === targetCode2) return true;
+    }
+
+    // 5. Match items inside this location
+    if (loc.items && Array.isArray(loc.items)) {
+      const itemMatch = loc.items.some(item => {
+        const pName = normalizeText(item.productName || item.name);
+        const pSku = normalizeText(item.productSku || item.sku);
+        return pName.includes(normQ) || pSku.includes(normQ);
+      });
+      if (itemMatch) return true;
+    }
+
+    return false;
+  };
+
   const filteredLocations = locations.filter(loc => {
     const matchesZone = selectedZone === 'ALL' || loc.zone === selectedZone;
-    const matchesSearch = loc.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (loc.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = matchLocationSearch(loc, searchTerm);
     return matchesZone && matchesSearch;
   });
 
@@ -163,9 +222,9 @@ const LocationManagement = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Layers size={28} color="var(--accent-primary)" />
           <div>
-            <h1 className="text-title" style={{ marginBottom: 0 }}>Danh Mục Kệ Kho & Phân Khu (Location Management)</h1>
+            <h1 className="text-title" style={{ marginBottom: 0 }}>Danh Mục Kệ Kho & Phân Khu (Location & Rack Management)</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
-              Quản lý định vị Kệ kho, Phân khu chuyên dụng, Sức chứa tối đa & Trạng thái không gian thời gian thực.
+              Quản lý định vị Tầng kho, Phân khu chuyên dụng, Sức chứa tối đa & Trạng thái không gian thời gian thực.
             </p>
           </div>
         </div>
@@ -173,9 +232,6 @@ const LocationManagement = () => {
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button className="btn btn-outline" onClick={fetchLocations} style={{ background: 'var(--bg-glass)' }}>
             <RefreshCw size={16} /> Làm mới
-          </button>
-          <button className="btn btn-primary" onClick={handleOpenAdd} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={18} /> Thêm Kệ Mới
           </button>
         </div>
       </div>
@@ -187,7 +243,7 @@ const LocationManagement = () => {
           <input
             type="text"
             className="form-input"
-            placeholder="Tìm theo mã kệ (A01, B01, D01...)..."
+            placeholder="Tìm theo mã tầng (A01, B01, D01...)..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             style={{ paddingLeft: '2.5rem' }}
@@ -221,12 +277,12 @@ const LocationManagement = () => {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Mã Kệ (Location Code)</th>
+              <th>Mã Kệ (Rack)</th>
+              <th>Vị Trí Tầng (Level Code)</th>
               <th>Phân Khu (Zone)</th>
-              <th>Dãy (Aisle)</th>
-              <th>Sức Chứa Tối Đa</th>
+              <th>Sức Chứa Tầng</th>
               <th>Tải Trọng Tối Đa</th>
-              <th>Trạng Thái Không Gian</th>
+              <th>Trạng Thái Không Gian Tầng</th>
               <th style={{ textAlign: 'center', width: '90px' }}>Thao Tác</th>
             </tr>
           </thead>
@@ -234,13 +290,13 @@ const LocationManagement = () => {
             {loading ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                  Đang tải danh mục Kệ kho...
+                  Đang tải danh mục Tầng kho...
                 </td>
               </tr>
             ) : filteredLocations.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                  Không tìm thấy Kệ kho phù hợp.
+                  Không tìm thấy Tầng kho phù hợp.
                 </td>
               </tr>
             ) : (
@@ -252,10 +308,15 @@ const LocationManagement = () => {
                 const isFull = rate >= 100;
                 const isHigh = rate >= 80;
 
+                const rackName = loc.aisle ? (loc.aisle.startsWith('Kệ') || loc.aisle.startsWith('Dãy') ? loc.aisle : `Kệ ${loc.aisle}`) : `Kệ ${loc.code[0] || 'A'}`;
+
                 return (
                   <tr key={loc.id}>
                     <td>
-                      <code style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-primary)' }}>{loc.code}</code>
+                      <span style={{ fontWeight: 700, fontSize: '1rem', color: '#60a5fa' }}>{rackName}</span>
+                    </td>
+                    <td>
+                      <code style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-primary)' }}>Tầng {loc.code}</code>
                       {loc.description && (
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                           {loc.description}
@@ -267,13 +328,12 @@ const LocationManagement = () => {
                         {zMeta.label}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 600 }}>Dãy {loc.aisle}</td>
                     <td style={{ fontWeight: 700 }}>{loc.maxCapacity} sản phẩm</td>
                     <td>{Number(loc.maxWeightKg).toFixed(2)} kg</td>
                     <td>
                       {isFull ? (
                         <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                          🔴 ĐÃ ĐẦY KỆ (100%)
+                          🔴 ĐÃ ĐẦY TẦNG (100%)
                         </span>
                       ) : isHigh ? (
                         <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
@@ -342,7 +402,7 @@ const LocationManagement = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Layers size={22} color="var(--accent-primary)" />
                 <h3 className="text-subtitle" style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)', fontSize: '1.15rem' }}>
-                  {editingLoc ? 'Sửa Thông Tin Kệ Kho' : 'Thêm Kệ Kho Mới'}
+                  {editingLoc ? 'Sửa Thông Tin Tầng Kho' : 'Thêm Tầng Kho Mới'}
                 </h3>
               </div>
               <button
@@ -359,7 +419,7 @@ const LocationManagement = () => {
 
             <form onSubmit={editingLoc ? handleSaveEdit : handleSaveAdd} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mã Kệ Kho (Location Code)</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mã Vị Trí Tầng (Level Code)</label>
                 <input
                   type="text"
                   className="form-input"
@@ -370,7 +430,7 @@ const LocationManagement = () => {
                     setForm({
                       ...form,
                       code: val,
-                      aisle: val ? `Dãy ${val[0]}` : form.aisle,
+                      aisle: val ? (val[0] === 'A' ? 'Kệ A' : val[0] === 'B' ? 'Kệ B' : val[0] === 'C' ? 'Kệ C' : val[0] === 'D' ? 'Kệ D' : `Kệ ${val[0]}`) : form.aisle,
                     });
                   }}
                   required
@@ -388,18 +448,21 @@ const LocationManagement = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Dãy Kệ (Aisle)</label>
-                  <input
-                    type="text"
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tên Kệ Kho (Rack Name)</label>
+                  <select
                     className="form-input"
-                    placeholder="Dãy A, Dãy B..."
                     value={form.aisle}
                     onChange={(e) => setForm({ ...form, aisle: e.target.value })}
                     required
-                  />
+                  >
+                    <option value="Kệ A">Kệ A</option>
+                    <option value="Kệ B">Kệ B</option>
+                    <option value="Kệ C">Kệ C</option>
+                    <option value="Kệ D">Kệ D</option>
+                  </select>
                 </div>
                 <div>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Sức Chứa Tối Đa (SP)</label>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Sức Chứa Tối Đa Tầng (SP)</label>
                   <input
                     type="number"
                     min="10"
@@ -412,7 +475,7 @@ const LocationManagement = () => {
               </div>
 
               <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tải Trọng Tối Đa (kg)</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tải Trọng Tối Đa Tầng (kg)</label>
                 <input
                   type="number"
                   min="50"
@@ -425,11 +488,11 @@ const LocationManagement = () => {
               </div>
 
               <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mô tả / Ghi chú về Kệ</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mô tả / Ghi chú về Tầng kho</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Ví dụ: Tủ kính an ninh cao - Hàng công nghệ đắt tiền..."
+                  placeholder="Ví dụ: Tầng kính bảo vệ - Smartphone & Tablet..."
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
@@ -448,7 +511,7 @@ const LocationManagement = () => {
                   Hủy
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting} style={{ minWidth: '130px', gap: '6px' }}>
-                  <Save size={16} /> {submitting ? 'Đang lưu...' : (editingLoc ? 'Lưu Thay Đổi' : 'Tạo Kệ Mới')}
+                  <Save size={16} /> {submitting ? 'Đang lưu...' : (editingLoc ? 'Lưu Thay Đổi' : 'Tạo Tầng Mới')}
                 </button>
               </div>
             </form>
@@ -497,13 +560,13 @@ const LocationManagement = () => {
             </div>
 
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-              Xác Nhận Xóa Kệ Kho?
+              Xác Nhận Xóa Tầng Kho?
             </h3>
 
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.5rem' }}>
-              Bạn có chắc chắn muốn xóa Kệ kho <b style={{ color: 'var(--accent-primary)' }}>"[{deletingLoc.code}]"</b> không?<br />
+              Bạn có chắc chắn muốn xóa Tầng kho <b style={{ color: 'var(--accent-primary)' }}>"[{deletingLoc.code}]"</b> không?<br />
               <span style={{ fontSize: '0.8rem', color: 'var(--danger)', marginTop: '4px', display: 'inline-block' }}>
-                ⚠️ Chỉ có thể xóa Kệ trống không chứa hàng hóa!
+                ⚠️ Chỉ có thể xóa Tầng trống không chứa hàng hóa!
               </span>
             </p>
 

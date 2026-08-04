@@ -13,6 +13,21 @@ const ZONE_CONFIG = {
   'ZONE-ESD-TEMP': { labelVi: 'Chống Tĩnh Điện ESD', name: 'Khu Chống Tĩnh Điện & Bán Dẫn (Phòng ESD)', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.12)', desc: 'Dãy D (D01 - D02): Phòng ESD kiểm soát độ ẩm 45% (Chipset, Board)' },
 };
 
+const PRODUCT_PALETTE = [
+  '#ef4444',
+  '#3b82f6',
+  '#10b981',
+  '#8b5cf6',
+  '#f59e0b',
+  '#ec4899',
+  '#06b6d4',
+  '#f97316',
+  '#6366f1',
+  '#14b8a6',
+  '#a855f7',
+  '#e11d48',
+];
+
 const getImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
@@ -43,9 +58,13 @@ const WarehouseMap = () => {
   const [addProductId, setAddProductId] = useState('');
   const [addQty, setAddQty] = useState(10);
   const [addLoading, setAddLoading] = useState(false);
+  const [addProductSearch, setAddProductSearch] = useState('');
+  const [showAddProductDropdown, setShowAddProductDropdown] = useState(false);
 
   // Putaway suggestion state
   const [putawayProductId, setPutawayProductId] = useState('');
+  const [putawaySearch, setPutawaySearch] = useState('');
+  const [showPutawayDropdown, setShowPutawayDropdown] = useState(false);
   const [putawayQty, setPutawayQty] = useState(10);
   const [putawayResult, setPutawayResult] = useState(null);
   const [allProducts, setAllProducts] = useState([]);
@@ -59,6 +78,16 @@ const WarehouseMap = () => {
     fetchLocations();
     fetchProducts();
     fetchUnallocatedProducts();
+
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.suggestion-item') && !e.target.closest('.form-input')) {
+        setShowSuggestions(false);
+        setShowAddProductDropdown(false);
+        setShowPutawayDropdown(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
   const fetchUnallocatedProducts = async () => {
@@ -161,10 +190,69 @@ const WarehouseMap = () => {
     }
   };
 
+  const normalizeText = (str) => {
+    if (!str) return '';
+    return String(str)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'd')
+      .trim();
+  };
+
+  const matchLocationSearch = (loc, query) => {
+    if (!query || !query.trim()) return true;
+
+    const normQ = normalizeText(query);
+    const code = (loc.code || '').toUpperCase();
+    const aisle = (loc.aisle || '').toUpperCase();
+    const desc = (loc.description || '').toLowerCase();
+
+    const normCode = normalizeText(code);
+    const normAisle = normalizeText(aisle);
+    const normDesc = normalizeText(desc);
+
+    // 1. Direct code/aisle/desc includes
+    if (normCode.includes(normQ) || normAisle.includes(normQ) || normDesc.includes(normQ)) return true;
+
+    // 2. Prefix matching ("Tầng A01", "Level A01", "Kệ A01", "Dãy A01")
+    const codeWithPrefix = `tang ${normCode} ke ${normCode} level ${normCode} day ${normCode}`;
+    if (codeWithPrefix.includes(normQ)) return true;
+
+    // 3. Reverse check (if search query contains the location code e.g. "xem tầng A01")
+    if (normQ.includes(normCode)) return true;
+
+    // 4. Letter + Digit combination matching (e.g. "A 01", "a-01", "A 1", "tầng A1")
+    const digitMatch = normQ.match(/\d+/);
+    const letterMatch = normQ.match(/[a-d]/i);
+
+    if (letterMatch && digitMatch) {
+      const searchLetter = letterMatch[0].toUpperCase();
+      const searchDigits = digitMatch[0];
+      const formattedDigits = searchDigits.padStart(2, '0');
+      const targetCode1 = `${searchLetter}${searchDigits}`;
+      const targetCode2 = `${searchLetter}${formattedDigits}`;
+
+      if (code === targetCode1 || code === targetCode2) return true;
+    }
+
+    // 5. Match items inside this location
+    if (loc.items && Array.isArray(loc.items)) {
+      const itemMatch = loc.items.some(item => {
+        const pName = normalizeText(item.productName || item.name);
+        const pSku = normalizeText(item.productSku || item.sku);
+        return pName.includes(normQ) || pSku.includes(normQ);
+      });
+      if (itemMatch) return true;
+    }
+
+    return false;
+  };
+
   const filteredLocations = locations.filter(loc => {
     const matchesZone = selectedZone === 'ALL' || loc.zone === selectedZone;
-    const matchesSearch = loc.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      loc.items?.some(i => i.productName.toLowerCase().includes(searchTerm.toLowerCase()) || i.productSku.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = matchLocationSearch(loc, searchTerm);
     return matchesZone && matchesSearch;
   });
 
@@ -180,6 +268,36 @@ const WarehouseMap = () => {
   const medRotRacksLeft = filteredLocations.filter(l => l.code === 'B01' || l.code === 'B02' || l.code === 'B03' || l.code === 'B04');
   const purePickingRacks = filteredLocations.filter(l => l.code.startsWith('A'));
   const medRotRacksRight = filteredLocations.filter(l => l.code === 'B05' || l.code === 'B06' || l.code === 'B07' || l.code === 'B08');
+
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const matchedProductSuggestions = (allProducts || []).filter(p => {
+    if (!searchTerm.trim()) return false;
+    const normQ = normalizeText(searchTerm);
+    const normName = normalizeText(p.name);
+    const normSku = normalizeText(p.sku);
+    return normName.includes(normQ) || normSku.includes(normQ);
+  }).slice(0, 10).map(p => {
+    const foundLocs = locations.filter(loc => loc.items?.some(it => it.productId === p.id && it.quantity > 0));
+    const storedLocationsText = foundLocs.length > 0 
+      ? foundLocs.map(l => `Tầng ${l.code}`).join(', ')
+      : 'Hàng chờ phân kệ';
+    return { ...p, storedLocationsText, firstLocation: foundLocs[0] || null };
+  });
+
+  const handleSelectProductSuggestion = (p) => {
+    setSearchTerm(p.name);
+    setShowSuggestions(false);
+    if (p.firstLocation) {
+      setSelectedRack(p.firstLocation);
+    }
+  };
+
+  const handleSelectLocationSuggestion = (loc) => {
+    setSearchTerm(loc.code);
+    setShowSuggestions(false);
+    setSelectedRack(loc);
+  };
 
   return (
     <div className="animate-slide-up" style={{ paddingBottom: '3rem' }}>
@@ -256,18 +374,96 @@ const WarehouseMap = () => {
       {/* Filter and AI Smart Putaway Section */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
         {/* Left: Zone Filters & Search */}
-        <div className="glass-card" style={{ padding: '1.25rem' }}>
+        <div className="glass-card" style={{ padding: '1.25rem', position: 'relative', overflow: 'visible', zIndex: 50 }}>
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+            <div style={{ position: 'relative', flex: 1, minWidth: '280px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', zIndex: 2 }} />
               <input
                 type="text"
                 className="form-input"
                 placeholder="Tìm mã kệ (A01, B01...) hoặc tên sản phẩm..."
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={e => {
+                  setSearchTerm(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
                 style={{ paddingLeft: '2.2rem', fontSize: '0.85rem' }}
               />
+
+              {/* FLOATING AUTOCOMPLETE SUGGESTION DROPDOWN */}
+              {showSuggestions && searchTerm.trim().length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    left: 0,
+                    right: 0,
+                    minWidth: '400px',
+                    background: 'var(--bg-card, #ffffff)',
+                    border: '1px solid var(--border-color, #e2e8f0)',
+                    borderRadius: '12px',
+                    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.28)',
+                    zIndex: 9999,
+                    maxHeight: '480px',
+                    overflowY: 'auto',
+                    padding: '0.5rem'
+                  }}
+                >
+                  {/* Matching Products Only */}
+                  {matchedProductSuggestions.length > 0 ? (
+                    <div>
+                      <div style={{ padding: '0.35rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        📦 Gợi ý Sản Phẩm ({matchedProductSuggestions.length}):
+                      </div>
+                      {matchedProductSuggestions.map(p => (
+                        <div
+                          key={p.id || p.sku}
+                          style={{
+                            padding: '0.45rem 0.6rem',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justify: 'space-between',
+                            gap: '0.75rem',
+                            transition: 'background 0.15s ease',
+                            marginBottom: '2px',
+                            borderBottom: '1px solid var(--border-color, rgba(0,0,0,0.04))'
+                          }}
+                          className="suggestion-item"
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'var(--accent-light, rgba(99, 102, 241, 0.08))'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          onClick={() => handleSelectProductSuggestion(p)}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flex: 1 }}>
+                            {getImageUrl(p.imageUrl) ? (
+                              <img src={getImageUrl(p.imageUrl)} alt="" style={{ width: '28px', height: '28px', borderRadius: '5px', objectFit: 'cover', flexShrink: 0 }} />
+                            ) : (
+                              <div style={{ width: '28px', height: '28px', borderRadius: '5px', background: 'var(--accent-light)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <Package size={14} />
+                              </div>
+                            )}
+                            <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                              <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>SKU: {p.sku} | {p.category || 'Điện tử'}</div>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <span className="badge badge-primary" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap', padding: '2px 8px' }}>
+                              📍 {p.storedLocationsText}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ padding: '0.85rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                      Không tìm thấy sản phẩm nào phù hợp với "{searchTerm}"
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Lọc phân khu:</span>
           </div>
@@ -295,21 +491,124 @@ const WarehouseMap = () => {
         </div>
 
         {/* Right: AI Smart Putaway Suggestion Widget */}
-        <div className="glass-card" style={{ padding: '1.25rem', borderLeft: '4px solid var(--accent-primary)' }}>
+        <div className="glass-card" style={{ padding: '1.25rem', borderLeft: '4px solid var(--accent-primary)', position: 'relative', overflow: 'visible', zIndex: 60 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
             <Sparkles size={20} color="var(--accent-primary)" />
             <strong style={{ fontSize: '0.95rem' }}>AI Gợi Ý Vị Trí Cất Hàng</strong>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
-            <select className="form-input" style={{ fontSize: '0.8rem', flex: 1 }} value={putawayProductId} onChange={e => setPutawayProductId(e.target.value)}>
-              <option value="">-- Chọn sản phẩm nhập kho --</option>
-              {allProducts.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-              ))}
-            </select>
-            <input type="number" min="1" className="form-input" style={{ width: '70px', fontSize: '0.8rem' }} value={putawayQty} onChange={e => setPutawayQty(Number(e.target.value))} />
-            <button className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} onClick={handleSuggestPutaway}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', position: 'relative' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="🔍 Tìm tên hoặc SKU sản phẩm..."
+                value={putawaySearch}
+                onChange={e => {
+                  setPutawaySearch(e.target.value);
+                  if (putawayProductId) setPutawayProductId('');
+                  setShowPutawayDropdown(true);
+                }}
+                onFocus={() => setShowPutawayDropdown(true)}
+                style={{ fontSize: '0.8rem', paddingRight: putawayProductId ? '2.5rem' : '0.5rem' }}
+              />
+
+              {putawayProductId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPutawayProductId('');
+                    setPutawaySearch('');
+                    setShowPutawayDropdown(true);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '4px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    color: '#ef4444',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '0.7rem',
+                    padding: '2px 5px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕ Đổi
+                </button>
+              )}
+
+              {showPutawayDropdown && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    left: 0,
+                    minWidth: '320px',
+                    width: 'max(100%, 320px)',
+                    background: 'var(--bg-card, #ffffff)',
+                    border: '1px solid var(--border-color, #cbd5e1)',
+                    borderRadius: '10px',
+                    boxShadow: '0 14px 32px rgba(0,0,0,0.35)',
+                    zIndex: 99999,
+                    maxHeight: '360px',
+                    overflowY: 'auto',
+                    padding: '0.4rem'
+                  }}
+                >
+                  {allProducts.filter(p => {
+                    if (!putawaySearch.trim() || putawayProductId) return true;
+                    const normQ = normalizeText(putawaySearch);
+                    return normalizeText(p.name).includes(normQ) || normalizeText(p.sku).includes(normQ);
+                  }).map(p => (
+                    <div
+                      key={p.id}
+                      style={{
+                        padding: '0.45rem 0.6rem',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '0.8rem',
+                        marginBottom: '2px',
+                        background: putawayProductId === p.id ? 'var(--accent-light, rgba(99, 102, 241, 0.15))' : 'transparent',
+                        borderBottom: '1px solid var(--border-color, rgba(0,0,0,0.04))'
+                      }}
+                      className="suggestion-item"
+                      onMouseEnter={(e) => {
+                        if (putawayProductId !== p.id) e.currentTarget.style.background = 'var(--bg-secondary, rgba(0,0,0,0.05))';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (putawayProductId !== p.id) e.currentTarget.style.background = 'transparent';
+                      }}
+                      onClick={() => {
+                        setPutawayProductId(p.id);
+                        setPutawaySearch(`${p.name} (${p.sku})`);
+                        setShowPutawayDropdown(false);
+                      }}
+                    >
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <strong style={{ color: 'var(--text-primary)' }}>{p.name}</strong>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>SKU: {p.sku}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <input
+              type="number"
+              min="1"
+              className="form-input"
+              style={{ width: '110px', fontSize: '0.85rem', fontWeight: 700, textAlign: 'center', padding: '0.4rem 0.5rem', flexShrink: 0 }}
+              value={putawayQty}
+              onChange={e => setPutawayQty(Number(e.target.value))}
+            />
+            <button className="btn btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', flexShrink: 0 }} onClick={handleSuggestPutaway}>
               Tìm Vị Trí
             </button>
           </div>
@@ -358,12 +657,12 @@ const WarehouseMap = () => {
           </div>
 
           {/* MAIN WAREHOUSE SPATIAL LAYOUT GRID */}
-          <div style={{ border: '1px solid #1e293b', padding: '1.25rem', borderRadius: '12px', background: '#0f172a' }}>
+          <div style={{ border: '1px solid #1e293b', padding: '1.25rem', borderRadius: '12px', background: '#0f172a', width: '100%', boxSizing: 'border-box', overflowX: 'auto' }}>
             
             {/* BluePrint Header Bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#60a5fa', fontWeight: 700 }}>
-                <LayoutGrid size={18} /> SƠ ĐỒ PHÂN KHU THIẾT BỊ ĐIỆN TỬ (20 KỆ PHỦ KÍN SƠ ĐỒ)
+                <LayoutGrid size={18} /> SƠ ĐỒ MẶT BẰNG KHO: 4 KỆ CHÍNH (KỆ A, B, C, D) & 20 TẦNG PHÂN KHU (MULTI-SKU)
               </div>
 
               {/* Legend Badges */}
@@ -375,7 +674,7 @@ const WarehouseMap = () => {
             </div>
 
             {/* 4 MAIN SPATIAL COLUMNS */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1fr 1.2fr', gap: '1rem', alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(190px, 1fr))', gap: '0.85rem', alignItems: 'start', width: '100%', boxSizing: 'border-box' }}>
               
               {/* COLUMN 1 (LEFT): KHU LƯU TRỮ MẬT ĐỘ CAO (C01 - C04) & PHÒNG ESD (D01 - D02) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -383,9 +682,9 @@ const WarehouseMap = () => {
                 {/* Block C: Compact High-Bay */}
                 <div style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.4)', borderRadius: '10px', padding: '0.85rem' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#c084fc', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(139, 92, 246, 0.3)', paddingBottom: '0.4rem' }}>
-                    [BLOCK C] KHU MẬT ĐỘ CAO
+                    [KỆ C] KHU MẬT ĐỘ CAO
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>4 Kệ High-Bay Linh Kiện (C01 - C04)</div>
+                  <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ C (4 Tầng Linh Kiện: C01 - C04)</div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                     {compactRacks.map(loc => {
@@ -404,14 +703,14 @@ const WarehouseMap = () => {
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                            <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Kệ {loc.code}</strong>
+                            <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
                             <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
                           </div>
                           <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
                             <div style={{ width: `${loc.occupancyRate}%`, height: '100%', background: badge.color }}></div>
                           </div>
                           <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {loc.description || 'Kệ đa tầng High-Bay'}
+                            {loc.description || 'Tầng đa năng High-Bay'}
                           </div>
                         </div>
                       );
@@ -422,9 +721,9 @@ const WarehouseMap = () => {
                 {/* Block D: ESD & Temperature Sensitive Room */}
                 <div style={{ background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.4)', borderRadius: '10px', padding: '0.85rem' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#22d3ee', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(6, 182, 212, 0.3)', paddingBottom: '0.4rem' }}>
-                    [BLOCK D] PHÒNG CHỐNG TĨNH ĐIỆN ESD
+                    [KỆ D] PHÒNG CHỐNG TĨNH ĐIỆN ESD
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>2 Kệ Phòng Sạch & Chipset (D01 - D02)</div>
+                  <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ D (2 Tầng Phòng Sạch: D01 - D02)</div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                     {esdRacks.map(loc => {
@@ -443,14 +742,14 @@ const WarehouseMap = () => {
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                            <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Kệ {loc.code}</strong>
+                            <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
                             <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
                           </div>
                           <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
                             <div style={{ width: `${loc.occupancyRate}%`, height: '100%', background: badge.color }}></div>
                           </div>
                           <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {loc.description || 'Phòng ESD kiểm soát độ ẩm'}
+                            {loc.description || 'Tầng ESD kiểm soát độ ẩm'}
                           </div>
                         </div>
                       );
@@ -460,12 +759,12 @@ const WarehouseMap = () => {
 
               </div>
 
-              {/* COLUMN 2: KHU LUÂN CHUYỂN VỪA (Dãy B Trái: B01 - B04) */}
+              {/* COLUMN 2: KHU LUÂN CHUYỂN VỪA (KỆ B TRÁI: B01 - B04) */}
               <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.4)', borderRadius: '10px', padding: '0.85rem' }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.3)', paddingBottom: '0.4rem' }}>
-                  Khu Luân Chuyển Vừa (Dãy B Trái)
+                  KỆ B (Dãy Trái: B01 - B04)
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>4 Kệ Điện Tử Cỡ Lớn (B01 - B04)</div>
+                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ B (Tầng B01 ➔ B04 - Điện Tử Cỡ Lớn)</div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                   {medRotRacksLeft.map(loc => {
@@ -484,14 +783,14 @@ const WarehouseMap = () => {
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Kệ {loc.code}</strong>
+                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
                           <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
                         </div>
                         <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
                           <div style={{ width: `${loc.occupancyRate}%`, height: '100%', background: badge.color }}></div>
                         </div>
                         <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {loc.description || 'Pallet tầng trệt - Smart TV & Loa'}
+                          {loc.description || 'Pallet tầng - Smart TV & Loa'}
                         </div>
                       </div>
                     );
@@ -499,12 +798,12 @@ const WarehouseMap = () => {
                 </div>
               </div>
 
-              {/* COLUMN 3 (CENTER): KHU NHẶT HÀNG NHANH TRUNG TÂM (Dãy A: A01 - A06) - 6 KỆ FULL */}
+              {/* COLUMN 3 (CENTER): KHU NHẶT HÀNG NHANH TRUNG TÂM (KỆ A: A01 - A06) */}
               <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '2px solid rgba(16, 185, 129, 0.5)', borderRadius: '10px', padding: '0.85rem' }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#34d399', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(16, 185, 129, 0.3)', paddingBottom: '0.4rem' }}>
-                  [BLOCK D] KHU NHẶT HÀNG CHUYÊN BIỆT
+                  [KỆ A] KHU NHẶT HÀNG CHUYÊN BIỆT
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>6 Kệ Hàng Giá Trị Cao (A01 - A06)</div>
+                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ A (6 Tầng Hàng Giá Trị Cao: A01 - A06)</div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                   {purePickingRacks.map(loc => {
@@ -523,7 +822,7 @@ const WarehouseMap = () => {
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Kệ {loc.code}</strong>
+                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
                           <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
                         </div>
                         <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
@@ -538,12 +837,12 @@ const WarehouseMap = () => {
                 </div>
               </div>
 
-              {/* COLUMN 4 (RIGHT): KHU LUÂN CHUYỂN VỪA (Dãy B Phải: B05 - B08) */}
+              {/* COLUMN 4 (RIGHT): KHU LUÂN CHUYỂN VỪA (KỆ B PHẢI: B05 - B08) */}
               <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.4)', borderRadius: '10px', padding: '0.85rem' }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.3)', paddingBottom: '0.4rem' }}>
-                  Khu Luân Chuyển Vừa (Dãy B Phải)
+                  KỆ B (Dãy Phải: B05 - B08)
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>4 Kệ Điện Tử Cỡ Lớn (B05 - B08)</div>
+                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ B (Tầng B05 ➔ B08 - Điện Tử Cỡ Lớn)</div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                   {medRotRacksRight.map(loc => {
@@ -562,7 +861,7 @@ const WarehouseMap = () => {
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Kệ {loc.code}</strong>
+                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
                           <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
                         </div>
                         <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
@@ -581,17 +880,17 @@ const WarehouseMap = () => {
           </div>
         </div>
       ) : (
-        /* TABLE VIEW (NO BIN COLUMN) */
+        /* TABLE VIEW (RACK & LEVEL TABLE) */
         <div className="glass-card" style={{ padding: '0.5rem', overflowX: 'auto' }}>
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: 'var(--bg-primary)', borderBottom: '2px solid var(--border-color)' }}>
-                <th style={{ padding: '1rem' }}>MÃ KỆ (LOCATION CODE)</th>
+                <th style={{ padding: '1rem' }}>MÃ KỆ (RACK)</th>
+                <th style={{ padding: '1rem' }}>VỊ TRÍ TẦNG (LEVEL)</th>
                 <th style={{ padding: '1rem' }}>PHÂN KHU (ZONE)</th>
-                <th style={{ padding: '1rem' }}>DÃY (AISLE)</th>
-                <th style={{ padding: '1rem' }}>SỨC CHỨA TỐI ĐA</th>
+                <th style={{ padding: '1rem' }}>SỨC CHỨA TẦNG</th>
                 <th style={{ padding: '1rem' }}>TẢI TRỌNG TỐI ĐA</th>
-                <th style={{ padding: '1rem' }}>TRẠNG THÁI KHÔNG GIAN</th>
+                <th style={{ padding: '1rem' }}>TRẠNG THÁI KHÔNG GIAN TẦNG</th>
               </tr>
             </thead>
             <tbody>
@@ -603,21 +902,23 @@ const WarehouseMap = () => {
 
                 return (
                   <tr key={loc.id} style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }} onClick={() => setSelectedRack(loc)}>
+                    <td style={{ padding: '1rem', fontWeight: 700, fontSize: '1.05rem', color: '#60a5fa' }}>
+                      Kệ {loc.aisle}
+                    </td>
                     <td style={{ padding: '1rem', fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-primary)' }}>
-                      {loc.code}
+                      Tầng {loc.code}
                     </td>
                     <td style={{ padding: '1rem' }}>
                       <span className="badge" style={{ background: zMeta.bg, color: zMeta.color, fontWeight: 700, padding: '0.3rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem' }}>
                         {zMeta.labelVi}
                       </span>
                     </td>
-                    <td style={{ padding: '1rem', fontWeight: 600 }}>Dãy {loc.aisle}</td>
                     <td style={{ padding: '1rem', fontWeight: 700 }}>{loc.maxCapacity} sản phẩm</td>
                     <td style={{ padding: '1rem' }}>{Number(loc.maxWeightKg).toFixed(2)} kg</td>
                     <td style={{ padding: '1rem' }}>
                       {isFull ? (
                         <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                          🔴 ĐÃ ĐẦY KỆ (100%)
+                          🔴 ĐÃ ĐẦY TẦNG (100%)
                         </span>
                       ) : isHigh ? (
                         <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
@@ -646,10 +947,10 @@ const WarehouseMap = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
               <div>
                 <h2 style={{ fontSize: '1.35rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  Chi Tiết Kệ Kho: <code style={{ color: 'var(--accent-primary)', fontSize: '1.4rem' }}>{selectedRack.code}</code>
+                  Chi Tiết Tầng Kho: <code style={{ color: 'var(--accent-primary)', fontSize: '1.4rem' }}>Tầng {selectedRack.code}</code>
                 </h2>
                 <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  Dãy Kệ: Dãy {selectedRack.aisle} | Phân khu: {ZONE_CONFIG[selectedRack.zone]?.name || selectedRack.zone}
+                  Thuộc Kệ {selectedRack.aisle} | Phân khu: {ZONE_CONFIG[selectedRack.zone]?.name || selectedRack.zone}
                 </span>
               </div>
               <button className="btn btn-outline" onClick={() => { setSelectedRack(null); setRelocateItem(null); setShowAddForm(false); }}>✕ Đóng</button>
@@ -666,26 +967,57 @@ const WarehouseMap = () => {
                 <div style={{ padding: '1rem', background: 'var(--bg-primary)', borderRadius: '12px', marginBottom: '1.25rem', border: '1px solid var(--border-color)' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem', textAlign: 'center' }}>
                     <div style={{ background: 'var(--bg-secondary)', padding: '0.5rem', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Sức Chứa Tối Đa</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Sức Chứa Tối Đa Tầng</div>
                       <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{maxCap} sản phẩm</strong>
                     </div>
                     <div style={{ background: 'var(--bg-secondary)', padding: '0.5rem', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Đã Lưu Trên Kệ</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Đã Lưu Trên Tầng Này</div>
                       <strong style={{ fontSize: '1.1rem', color: 'var(--accent-primary)' }}>{currentUsed} sản phẩm</strong>
                     </div>
                     <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.5rem', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>Còn Trống</div>
+                      <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>Còn Trống Tầng</div>
                       <strong style={{ fontSize: '1.1rem', color: '#10b981' }}>{remaining} chỗ</strong>
                     </div>
                   </div>
 
-                  {/* Visual Capacity Bar */}
-                  <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.5rem' }}>
-                    <div style={{ width: `${selectedRack.occupancyRate || 0}%`, height: '100%', background: selectedRack.occupancyRate >= 90 ? '#ef4444' : selectedRack.occupancyRate >= 50 ? '#f59e0b' : '#10b981' }}></div>
+                  {/* Visual Multi-Product Color Segmented Capacity Bar */}
+                  <div style={{
+                    height: '14px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: '7px',
+                    overflow: 'hidden',
+                    marginBottom: '0.65rem',
+                    display: 'flex',
+                    border: '1px solid var(--border-color)',
+                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)'
+                  }}>
+                    {selectedRack.items && selectedRack.items.length > 0 ? (
+                      selectedRack.items.map((it, idx) => {
+                        const color = PRODUCT_PALETTE[idx % PRODUCT_PALETTE.length];
+                        const pQty = it.quantity || 0;
+                        const widthPct = (pQty / maxCap) * 100;
+                        const pName = it.productName || it.product?.name || `Sản phẩm ${idx + 1}`;
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              width: `${widthPct}%`,
+                              height: '100%',
+                              background: color,
+                              borderRight: '1px solid rgba(255,255,255,0.4)',
+                              transition: 'width 0.3s ease'
+                            }}
+                            title={`${pName}: ${pQty} món (${Math.round(widthPct)}% dung lượng tầng)`}
+                          />
+                        );
+                      })
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', background: 'var(--bg-secondary)' }} />
+                    )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    <span>Tải trọng tối đa: <b>{selectedRack.maxWeightKg} kg</b></span>
-                    <span style={{ color: '#10b981', fontWeight: 700 }}>🟢 Khả dụng {freePercent}% dung lượng</span>
+                    <span>Tải trọng tối đa tầng: <b>{selectedRack.maxWeightKg} kg</b></span>
+                    <span style={{ color: '#10b981', fontWeight: 700 }}>🟢 Khả dụng {freePercent}% dung lượng tầng</span>
                   </div>
                 </div>
               );
@@ -693,32 +1025,152 @@ const WarehouseMap = () => {
 
             {/* ACTION BAR: ADD PRODUCT TO THIS RACK BUTTON */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h4 style={{ fontSize: '0.95rem', margin: 0 }}>Danh sách sản phẩm trên kệ ({selectedRack.items?.length || 0}):</h4>
+              <h4 style={{ fontSize: '0.95rem', margin: 0 }}>Các sản phẩm đang xếp trên tầng này ({selectedRack.items?.length || 0}):</h4>
               <button
                 className="btn btn-primary"
                 style={{ padding: '0.4rem 0.85rem', fontSize: '0.85rem' }}
                 onClick={() => { setShowAddForm(!showAddForm); setRelocateItem(null); }}
               >
-                <PlusCircle size={16} /> {showAddForm ? 'Ẩn Form Thêm' : `Thêm Sản Phẩm Vào Kệ ${selectedRack.code}`}
+                {showAddForm ? '✕ Hủy Bỏ' : '➕ Xếp Hàng Mới Vào Tầng Này'}
               </button>
             </div>
 
             {/* INLINE FORM: ADD PRODUCT DIRECTLY TO THIS RACK */}
             {showAddForm && (
               <form onSubmit={handleAddStockToRack} style={{ padding: '1.1rem', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '10px', border: '1px solid #10b981', marginBottom: '1.25rem' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', color: '#10b981', fontSize: '0.95rem' }}>➕ Xếp Thêm Sản Phẩm Mới Vào Kệ {selectedRack.code}</h4>
+                <h4 style={{ margin: '0 0 0.75rem 0', color: '#10b981', fontSize: '0.95rem' }}>➕ Xếp Thêm Sản Phẩm Mới Vào Tầng {selectedRack.code} (Kệ {selectedRack.aisle})</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem', marginBottom: '0.85rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>Chọn sản phẩm từ danh mục:</label>
-                    <select required className="form-input" style={{ fontSize: '0.85rem' }} value={addProductId} onChange={e => setAddProductId(e.target.value)}>
-                      <option value="">-- Chọn sản phẩm --</option>
-                      {allProducts.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.sku}) - [{p.category || 'Mặt hàng'}]</option>
-                      ))}
-                    </select>
+                  <div style={{ position: 'relative' }}>
+                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>
+                      🔍 Gõ tên / SKU để lọc sản phẩm:
+                    </label>
+
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Gõ tên hoặc mã SKU sản phẩm..."
+                        value={addProductSearch}
+                        onChange={e => {
+                          setAddProductSearch(e.target.value);
+                          if (addProductId) setAddProductId('');
+                          setShowAddProductDropdown(true);
+                        }}
+                        onFocus={() => setShowAddProductDropdown(true)}
+                        style={{ fontSize: '0.85rem', paddingRight: addProductId ? '3.8rem' : '0.75rem', borderColor: addProductId ? '#10b981' : undefined }}
+                      />
+
+                      {addProductId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddProductId('');
+                            setAddProductSearch('');
+                            setShowAddProductDropdown(true);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            right: '6px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#ef4444',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '0.72rem',
+                            padding: '3px 8px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✕ Đổi
+                        </button>
+                      )}
+                    </div>
+
+                    {/* SEARCHABLE FILTERED DROPDOWN */}
+                    {showAddProductDropdown && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 'calc(100% + 4px)',
+                          left: 0,
+                          right: 0,
+                          background: 'var(--bg-card, #ffffff)',
+                          border: '1px solid var(--border-color, #cbd5e1)',
+                          borderRadius: '8px',
+                          boxShadow: '0 10px 28px rgba(0,0,0,0.3)',
+                          zIndex: 9999,
+                          maxHeight: '240px',
+                          overflowY: 'auto',
+                          padding: '0.35rem'
+                        }}
+                      >
+                        {allProducts.filter(p => {
+                          if (!addProductSearch.trim() || addProductId) return true;
+                          const normQ = normalizeText(addProductSearch);
+                          return normalizeText(p.name).includes(normQ) || normalizeText(p.sku).includes(normQ) || normalizeText(p.category || '').includes(normQ);
+                        }).length === 0 ? (
+                          <div style={{ padding: '0.65rem', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            Không thấy sản phẩm khớp với "{addProductSearch}"
+                          </div>
+                        ) : (
+                          allProducts.filter(p => {
+                            if (!addProductSearch.trim() || addProductId) return true;
+                            const normQ = normalizeText(addProductSearch);
+                            return normalizeText(p.name).includes(normQ) || normalizeText(p.sku).includes(normQ) || normalizeText(p.category || '').includes(normQ);
+                          }).map(p => (
+                            <div
+                              key={p.id}
+                              style={{
+                                padding: '0.5rem 0.65rem',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '0.5rem',
+                                marginBottom: '2px',
+                                background: addProductId === p.id ? 'var(--accent-light, rgba(99, 102, 241, 0.15))' : 'transparent',
+                                borderBottom: '1px solid var(--border-color, rgba(0,0,0,0.04))'
+                              }}
+                              className="suggestion-item"
+                              onMouseEnter={(e) => {
+                                if (addProductId !== p.id) e.currentTarget.style.background = 'var(--bg-secondary, rgba(0,0,0,0.05))';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (addProductId !== p.id) e.currentTarget.style.background = 'transparent';
+                              }}
+                              onClick={() => {
+                                setAddProductId(p.id);
+                                setAddProductSearch(`${p.name} (${p.sku})`);
+                                setShowAddProductDropdown(false);
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
+                                {getImageUrl(p.imageUrl) ? (
+                                  <img src={getImageUrl(p.imageUrl)} alt="" style={{ width: '26px', height: '26px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: '26px', height: '26px', borderRadius: '4px', background: 'var(--accent-light)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <Package size={14} />
+                                  </div>
+                                )}
+                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>SKU: {p.sku} | [{p.category || 'Mặt hàng'}]</div>
+                                </div>
+                              </div>
+                              <span className="badge badge-primary" style={{ fontSize: '0.7rem', flexShrink: 0, padding: '2px 6px' }}>
+                                {fmtVND(p.price)}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>Số lượng nhập:</label>
+                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>Số lượng nhập:</label>
                     <input required type="number" min="1" className="form-input" style={{ fontSize: '0.85rem' }} value={addQty} onChange={e => setAddQty(Number(e.target.value))} />
                   </div>
                 </div>
@@ -726,46 +1178,52 @@ const WarehouseMap = () => {
                 <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                   <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowAddForm(false)}>Hủy</button>
                   <button type="submit" className="btn btn-primary" disabled={addLoading}>
-                    {addLoading ? 'Đang thêm...' : 'Lưu Vào Kệ'}
+                    {addLoading ? 'Đang thêm...' : 'Lưu Vào Tầng'}
                   </button>
                 </div>
               </form>
             )}
 
-            {/* List of items on this Rack */}
+            {/* List of items on this Rack Level */}
             {selectedRack.items && selectedRack.items.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', marginBottom: '1rem' }}>
-                {selectedRack.items.map((it, idx) => (
-                  <div key={idx} style={{ padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontWeight: 700 }}>{it.productName}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>SKU: {it.productSku} | Số lượng: <b>{it.quantity} món</b></div>
+                {selectedRack.items.map((it, idx) => {
+                  const color = PRODUCT_PALETTE[idx % PRODUCT_PALETTE.length];
+                  return (
+                    <div key={idx} style={{ padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: `4px solid ${color}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} title={`Màu phân đoạn trên thanh tải trọng`} />
+                        <div>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{it.productName}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>SKU: {it.productSku} | Số lượng: <b>{it.quantity} món</b></div>
+                        </div>
+                      </div>
+                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => { setRelocateItem(it); setRelocateQty(it.quantity); setShowAddForm(false); }}>
+                        <ArrowRightLeft size={14} /> Chuyển Tầng
+                      </button>
                     </div>
-                    <button className="btn btn-outline" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => { setRelocateItem(it); setRelocateQty(it.quantity); setShowAddForm(false); }}>
-                      <ArrowRightLeft size={14} /> Chuyển Kệ
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
-              <p style={{ color: 'var(--text-secondary)', padding: '1rem', textAlign: 'center', background: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '1rem' }}>Kệ hiện đang trống hoàn toàn.</p>
+              <p style={{ color: 'var(--text-secondary)', padding: '1rem', textAlign: 'center', background: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '1rem' }}>Tầng này hiện đang trống hoàn toàn.</p>
             )}
 
             {/* Relocate Form */}
             {relocateItem && (
               <div style={{ padding: '1rem', background: 'rgba(99, 102, 241, 0.08)', borderRadius: '10px', border: '1px solid var(--accent-primary)', marginTop: '0.5rem' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', color: 'var(--accent-primary)', fontSize: '0.95rem' }}>🔄 Chuyển Vị Trí: {relocateItem.productName}</h4>
+                <h4 style={{ margin: '0 0 0.75rem 0', color: 'var(--accent-primary)', fontSize: '0.95rem' }}>🔄 Chuyển Tầng Cho: {relocateItem.productName}</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                   <div>
                     <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Số lượng chuyển:</label>
                     <input type="number" min="1" max={relocateItem.quantity} className="form-input" value={relocateQty} onChange={e => setRelocateQty(Number(e.target.value))} />
                   </div>
                   <div>
-                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Chọn Kệ đích đến:</label>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Chọn Tầng đích đến:</label>
                     <select className="form-input" value={targetLocation} onChange={e => setTargetLocation(e.target.value)}>
-                      <option value="">-- Chọn Kệ đến --</option>
+                      <option value="">-- Chọn Tầng đến --</option>
                       {locations.filter(l => l.code !== selectedRack.code).map(l => (
-                        <option key={l.id} value={l.code}>Kệ {l.code} (Dãy {l.aisle} - Trống {l.maxCapacity - l.currentItemsCount})</option>
+                        <option key={l.id} value={l.code}>Tầng {l.code} (Kệ {l.aisle} - Trống {l.maxCapacity - l.currentItemsCount} chỗ)</option>
                       ))}
                     </select>
                   </div>
