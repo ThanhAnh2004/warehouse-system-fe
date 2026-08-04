@@ -113,7 +113,7 @@ const Layout = () => {
           {/* Nhóm 3: Sơ Đồ & Vị Trí Kệ Kho */}
           {(user?.role === 'Admin' || user?.role === 'Manager') && (
             <>
-              <div className="nav-section-title">Mặt Bằng & Kệ Kho</div>
+              <div className="nav-section-title">Mặt Bằng, Kệ & Tầng Kho</div>
               <NavLink to="/warehouse-map" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Map size={20} />
                 <span>Sơ đồ Kệ kho</span>

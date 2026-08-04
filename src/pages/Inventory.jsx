@@ -49,7 +49,7 @@ const Inventory = () => {
     category: 'Điện thoại & Tablet',
     description: '',
     minStockLevel: 20,
-    unit: 'Chiếc',
+    unit: 'Bộ',
     image: null
   });
 
@@ -121,7 +121,7 @@ const Inventory = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setShowModal(false);
-      setNewProduct({ name: '', sku: '', price: '', quantity: 0, category: 'Điện thoại & Tablet', unit: 'Chiếc', description: '', minStockLevel: 20, image: null });
+      setNewProduct({ name: '', sku: '', price: '', quantity: 0, category: 'Điện thoại & Tablet', unit: 'Bộ', description: '', minStockLevel: 20, image: null });
       fetchProducts();
     } catch (err) {
       alert('Lỗi tạo sản phẩm: ' + (err.response?.data?.message || err.message));
@@ -373,7 +373,6 @@ const Inventory = () => {
                 <div>
                   <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Đơn Vị Tính</label>
                   <select className="form-input" value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})}>
-                    <option value="Chiếc">Chiếc</option>
                     <option value="Bộ">Bộ</option>
                     <option value="Cái">Cái</option>
                     <option value="Hộp">Hộp</option>
