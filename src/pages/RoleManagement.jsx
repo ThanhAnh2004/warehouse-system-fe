@@ -10,7 +10,7 @@ const CATEGORY_NAMES = {
   stock: 'QUẢN LÝ TỒN KHO THỰC TẾ',
   adjustments: 'KIỂM KÊ & ĐIỀU CHỈNH KHO',
   transactions: 'LỊCH SỬ GIAO DỊCH KHO',
-  locations: 'SƠ ĐỒ & KỆ KHO (AI GỢI Ý & PHÂN KỆ)',
+  locations: 'SƠ ĐỒ & KỆ KHO (GỢI Ý VỊ TRÍ & PHÂN KỆ)',
   reports: 'BÁO CÁO, THỐNG KÊ & XUẤT EXCEL',
   forecast: 'DỰ BÁO NHU CẦU & CÔNG THỨC AI',
   alerts: 'CẢNH BÁO KHO HÀNG & HẾT HÀNG',

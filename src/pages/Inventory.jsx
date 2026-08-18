@@ -28,7 +28,7 @@ const getImageUrl = (url) => {
 
 const Inventory = () => {
   const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
+  const { user, hasPermission } = useContext(AuthContext);
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -151,9 +151,11 @@ const Inventory = () => {
     <div className="animate-slide-up">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h2 className="text-title" style={{ marginBottom: 0 }}>Quản Lý Tồn Kho (Inventory)</h2>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Plus size={18} /> Thêm Sản Phẩm Mới
-        </button>
+        {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('products:create')) && (
+          <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Plus size={18} /> Thêm Sản Phẩm Mới
+          </button>
+        )}
       </div>
 
       <div className="glass-card mb-4" style={{ padding: '1rem' }}>
