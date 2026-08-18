@@ -20,7 +20,11 @@ const Login = () => {
       const loggedInUser = await login(formData.email, formData.password);
       navigate(loggedInUser.role === 'Staff' ? '/inventory' : '/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại email hoặc mật khẩu.');
+      if (err.code === 'ERR_NETWORK' || !err.response || err.response?.status === 503) {
+        setError('⚠️ Lỗi: Mất kết nối đến hệ thống máy chủ hoặc Message Bus. Đang thử kết nối lại...');
+      } else {
+        setError(err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại email hoặc mật khẩu.');
+      }
     } finally {
       setLoading(false);
     }

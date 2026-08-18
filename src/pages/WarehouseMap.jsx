@@ -490,11 +490,11 @@ const WarehouseMap = () => {
           </div>
         </div>
 
-        {/* Right: AI Smart Putaway Suggestion Widget */}
+        {/* Right: Smart Putaway Suggestion Widget */}
         <div className="glass-card" style={{ padding: '1.25rem', borderLeft: '4px solid var(--accent-primary)', position: 'relative', overflow: 'visible', zIndex: 60 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
             <Sparkles size={20} color="var(--accent-primary)" />
-            <strong style={{ fontSize: '0.95rem' }}>AI Gợi Ý Vị Trí Cất Hàng</strong>
+            <strong style={{ fontSize: '0.95rem' }}>Gợi Ý Vị Trí Cất Hàng</strong>
           </div>
 
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', position: 'relative' }}>
@@ -1023,166 +1023,10 @@ const WarehouseMap = () => {
               );
             })()}
 
-            {/* ACTION BAR: ADD PRODUCT TO THIS RACK BUTTON */}
+            {/* TITLE BAR: PRODUCTS ON THIS RACK */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h4 style={{ fontSize: '0.95rem', margin: 0 }}>Các sản phẩm đang xếp trên tầng này ({selectedRack.items?.length || 0}):</h4>
-              <button
-                className="btn btn-primary"
-                style={{ padding: '0.4rem 0.85rem', fontSize: '0.85rem' }}
-                onClick={() => { setShowAddForm(!showAddForm); setRelocateItem(null); }}
-              >
-                {showAddForm ? '✕ Hủy Bỏ' : '➕ Xếp Hàng Mới Vào Tầng Này'}
-              </button>
             </div>
-
-            {/* INLINE FORM: ADD PRODUCT DIRECTLY TO THIS RACK */}
-            {showAddForm && (
-              <form onSubmit={handleAddStockToRack} style={{ padding: '1.1rem', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '10px', border: '1px solid #10b981', marginBottom: '1.25rem' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', color: '#10b981', fontSize: '0.95rem' }}>➕ Xếp Thêm Sản Phẩm Mới Vào Tầng {selectedRack.code} (Kệ {selectedRack.aisle})</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem', marginBottom: '0.85rem' }}>
-                  <div style={{ position: 'relative' }}>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>
-                      🔍 Gõ tên / SKU để lọc sản phẩm:
-                    </label>
-
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Gõ tên hoặc mã SKU sản phẩm..."
-                        value={addProductSearch}
-                        onChange={e => {
-                          setAddProductSearch(e.target.value);
-                          if (addProductId) setAddProductId('');
-                          setShowAddProductDropdown(true);
-                        }}
-                        onFocus={() => setShowAddProductDropdown(true)}
-                        style={{ fontSize: '0.85rem', paddingRight: addProductId ? '3.8rem' : '0.75rem', borderColor: addProductId ? '#10b981' : undefined }}
-                      />
-
-                      {addProductId && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddProductId('');
-                            setAddProductSearch('');
-                            setShowAddProductDropdown(true);
-                          }}
-                          style={{
-                            position: 'absolute',
-                            right: '6px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            background: 'rgba(239, 68, 68, 0.15)',
-                            color: '#ef4444',
-                            border: 'none',
-                            borderRadius: '4px',
-                            fontSize: '0.72rem',
-                            padding: '3px 8px',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          ✕ Đổi
-                        </button>
-                      )}
-                    </div>
-
-                    {/* SEARCHABLE FILTERED DROPDOWN */}
-                    {showAddProductDropdown && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 'calc(100% + 4px)',
-                          left: 0,
-                          right: 0,
-                          background: 'var(--bg-card, #ffffff)',
-                          border: '1px solid var(--border-color, #cbd5e1)',
-                          borderRadius: '8px',
-                          boxShadow: '0 10px 28px rgba(0,0,0,0.3)',
-                          zIndex: 9999,
-                          maxHeight: '240px',
-                          overflowY: 'auto',
-                          padding: '0.35rem'
-                        }}
-                      >
-                        {allProducts.filter(p => {
-                          if (!addProductSearch.trim() || addProductId) return true;
-                          const normQ = normalizeText(addProductSearch);
-                          return normalizeText(p.name).includes(normQ) || normalizeText(p.sku).includes(normQ) || normalizeText(p.category || '').includes(normQ);
-                        }).length === 0 ? (
-                          <div style={{ padding: '0.65rem', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                            Không thấy sản phẩm khớp với "{addProductSearch}"
-                          </div>
-                        ) : (
-                          allProducts.filter(p => {
-                            if (!addProductSearch.trim() || addProductId) return true;
-                            const normQ = normalizeText(addProductSearch);
-                            return normalizeText(p.name).includes(normQ) || normalizeText(p.sku).includes(normQ) || normalizeText(p.category || '').includes(normQ);
-                          }).map(p => (
-                            <div
-                              key={p.id}
-                              style={{
-                                padding: '0.5rem 0.65rem',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '0.5rem',
-                                marginBottom: '2px',
-                                background: addProductId === p.id ? 'var(--accent-light, rgba(99, 102, 241, 0.15))' : 'transparent',
-                                borderBottom: '1px solid var(--border-color, rgba(0,0,0,0.04))'
-                              }}
-                              className="suggestion-item"
-                              onMouseEnter={(e) => {
-                                if (addProductId !== p.id) e.currentTarget.style.background = 'var(--bg-secondary, rgba(0,0,0,0.05))';
-                              }}
-                              onMouseLeave={(e) => {
-                                if (addProductId !== p.id) e.currentTarget.style.background = 'transparent';
-                              }}
-                              onClick={() => {
-                                setAddProductId(p.id);
-                                setAddProductSearch(`${p.name} (${p.sku})`);
-                                setShowAddProductDropdown(false);
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
-                                {getImageUrl(p.imageUrl) ? (
-                                  <img src={getImageUrl(p.imageUrl)} alt="" style={{ width: '26px', height: '26px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }} />
-                                ) : (
-                                  <div style={{ width: '26px', height: '26px', borderRadius: '4px', background: 'var(--accent-light)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                    <Package size={14} />
-                                  </div>
-                                )}
-                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>SKU: {p.sku} | [{p.category || 'Mặt hàng'}]</div>
-                                </div>
-                              </div>
-                              <span className="badge badge-primary" style={{ fontSize: '0.7rem', flexShrink: 0, padding: '2px 6px' }}>
-                                {fmtVND(p.price)}
-                              </span>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>Số lượng nhập:</label>
-                    <input required type="number" min="1" className="form-input" style={{ fontSize: '0.85rem' }} value={addQty} onChange={e => setAddQty(Number(e.target.value))} />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                  <button type="button" className="btn btn-outline" style={{ background: 'var(--bg-glass)' }} onClick={() => setShowAddForm(false)}>Hủy</button>
-                  <button type="submit" className="btn btn-primary" disabled={addLoading}>
-                    {addLoading ? 'Đang thêm...' : 'Lưu Vào Tầng'}
-                  </button>
-                </div>
-              </form>
-            )}
 
             {/* List of items on this Rack Level */}
             {selectedRack.items && selectedRack.items.length > 0 ? (
@@ -1365,7 +1209,7 @@ const WarehouseMap = () => {
                             .catch(() => {});
                         }}
                       >
-                        <Sparkles size={14} /> AI Gợi Ý Kệ
+                        <Sparkles size={14} /> Gợi Ý Kệ
                       </button>
                     </div>
                   ))}

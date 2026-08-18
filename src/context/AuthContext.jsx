@@ -29,8 +29,14 @@ export const AuthProvider = ({ children }) => {
     if (payload.sub) {
       apiClient.get(`/users/${payload.sub}`)
         .then(res => {
-          if (res.data && res.data.avatarUrl) {
-            const updated = { ...userData, avatarUrl: res.data.avatarUrl, fullname: res.data.fullname || userData.fullname };
+          if (res.data) {
+            const updated = {
+              ...userData,
+              avatarUrl: res.data.avatarUrl || userData.avatarUrl,
+              fullname: res.data.fullname || userData.fullname,
+              role: res.data.role || userData.role,
+              permissions: res.data.permissions || userData.permissions || [],
+            };
             localStorage.setItem('user', JSON.stringify(updated));
             setUser(updated);
           }
@@ -66,7 +72,7 @@ export const AuthProvider = ({ children }) => {
           const parsedUser = JSON.parse(storedUser);
           setUser(parsedUser);
 
-          // Fetch latest user profile to sync avatarUrl & fullname from backend
+          // Fetch latest user profile to sync avatarUrl, fullname & permissions from backend
           if (parsedUser.id) {
             apiClient.get(`/users/${parsedUser.id}`)
               .then(res => {
@@ -75,6 +81,8 @@ export const AuthProvider = ({ children }) => {
                     ...parsedUser,
                     fullname: res.data.fullname || parsedUser.fullname,
                     avatarUrl: res.data.avatarUrl || parsedUser.avatarUrl,
+                    role: res.data.role || parsedUser.role,
+                    permissions: res.data.permissions || parsedUser.permissions || [],
                   };
                   localStorage.setItem('user', JSON.stringify(updated));
                   setUser(updated);
@@ -155,8 +163,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const hasPermission = (permKey) => {
+    if (!user) return false;
+    if (user.role === 'Admin') return true;
+    if (!permKey) return true;
+    const perms = user.permissions || [];
+    return perms.includes(permKey);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, updateUser }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, updateUser, hasPermission }}>
       {!loading && children}
     </AuthContext.Provider>
   );
