@@ -26,14 +26,28 @@ const App = () => {
           <Route path="/login" element={<Login />} />
 
           <Route element={<Layout />}>
-            <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager']} />}>
+            {/* Dashboard / Trang chủ */}
+            <Route element={<ProtectedRoute requiredPermission="reports:read" allowedRoles={['Admin', 'Manager']} />}>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/alerts" element={<Alerts />} />
+            </Route>
+
+            {/* Sơ đồ & Danh mục Kệ kho */}
+            <Route element={<ProtectedRoute requiredPermission="locations:read" allowedRoles={['Admin', 'Manager']} />}>
               <Route path="/warehouse-map" element={<WarehouseMap />} />
               <Route path="/locations" element={<LocationManagement />} />
             </Route>
 
+            {/* Báo cáo & Thống kê */}
+            <Route element={<ProtectedRoute requiredPermission="reports:read" allowedRoles={['Admin', 'Manager']} />}>
+              <Route path="/reports" element={<Reports />} />
+            </Route>
+
+            {/* Cảnh báo kho hàng */}
+            <Route element={<ProtectedRoute requiredPermission="alerts:read" allowedRoles={['Admin', 'Manager']} />}>
+              <Route path="/alerts" element={<Alerts />} />
+            </Route>
+
+            {/* Vận hành Kho hàng */}
             <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']} />}>
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/inventory/:sku" element={<ProductDetails />} />
@@ -43,9 +57,16 @@ const App = () => {
               <Route path="/profile" element={<Profile />} />
             </Route>
 
-            <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
+            {/* Quản trị Hệ thống */}
+            <Route element={<ProtectedRoute requiredPermission="users:read" allowedRoles={['Admin']} />}>
               <Route path="/users" element={<UserManagement />} />
+            </Route>
+
+            <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
               <Route path="/role-management" element={<RoleManagement />} />
+            </Route>
+
+            <Route element={<ProtectedRoute requiredPermission="system:read" allowedRoles={['Admin']} />}>
               <Route path="/system-health" element={<SystemHealth />} />
             </Route>
           </Route>

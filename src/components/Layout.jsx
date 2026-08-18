@@ -15,11 +15,20 @@ const getImageUrl = (url) => {
 };
 
 const Layout = () => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, hasPermission } = useContext(AuthContext);
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+  const [connectionWarning, setConnectionWarning] = useState('');
+
+  useEffect(() => {
+    const handleConnLost = (e) => {
+      setConnectionWarning(e.detail?.message || 'Lỗi: Mất kết nối đến hệ thống máy chủ hoặc Message Bus. Đang thử kết nối lại...');
+    };
+    window.addEventListener('wms:connection-lost', handleConnLost);
+    return () => window.removeEventListener('wms:connection-lost', handleConnLost);
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -85,7 +94,7 @@ const Layout = () => {
         
         <nav className="sidebar-nav">
           {/* Nhóm 1: Tổng Quan */}
-          {user?.role !== 'Staff' && (
+          {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('reports:read')) && (
             <>
               <div className="nav-section-title">Tổng Quan</div>
               <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -97,21 +106,27 @@ const Layout = () => {
 
           {/* Nhóm 2: Vận Hành Kho hàng */}
           <div className="nav-section-title">Vận Hành Kho Hàng</div>
-          <NavLink to="/inventory" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Package size={20} />
-            <span>Quản lý Tồn kho</span>
-          </NavLink>
-          <NavLink to="/transactions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <ArrowLeftRight size={20} />
-            <span>Lịch sử Giao dịch</span>
-          </NavLink>
-          <NavLink to="/adjustments" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <ClipboardList size={20} />
-            <span>Kiểm kê & Điều chỉnh</span>
-          </NavLink>
+          {(user?.role === 'Admin' || hasPermission('stock:read') || hasPermission('products:read')) && (
+            <NavLink to="/inventory" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Package size={20} />
+              <span>Quản lý Tồn kho</span>
+            </NavLink>
+          )}
+          {(user?.role === 'Admin' || hasPermission('transactions:read')) && (
+            <NavLink to="/transactions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <ArrowLeftRight size={20} />
+              <span>Lịch sử Giao dịch</span>
+            </NavLink>
+          )}
+          {(user?.role === 'Admin' || hasPermission('adjustments:read')) && (
+            <NavLink to="/adjustments" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <ClipboardList size={20} />
+              <span>Kiểm kê & Điều chỉnh</span>
+            </NavLink>
+          )}
 
           {/* Nhóm 3: Sơ Đồ & Vị Trí Kệ Kho */}
-          {(user?.role === 'Admin' || user?.role === 'Manager') && (
+          {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('locations:read') || hasPermission('locations:allocate')) && (
             <>
               <div className="nav-section-title">Mặt Bằng, Kệ & Tầng Kho</div>
               <NavLink to="/warehouse-map" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -126,41 +141,51 @@ const Layout = () => {
           )}
 
           {/* Nhóm 4: Thông Báo & Báo Cáo */}
-          {(user?.role === 'Admin' || user?.role === 'Manager') && (
+          {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('reports:read') || hasPermission('alerts:read')) && (
             <>
               <div className="nav-section-title">Thông Báo & Báo Cáo</div>
-              <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <FileText size={20} />
-                <span>Báo cáo & Thống kê</span>
-              </NavLink>
-              <NavLink to="/alerts" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Bell size={20} />
-                <span>Cảnh báo Kho hàng</span>
-                {unreadCount > 0 && (
-                  <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: '#fff', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, minWidth: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
-                    {unreadCount}
-                  </span>
-                )}
-              </NavLink>
+              {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('reports:read')) && (
+                <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <FileText size={20} />
+                  <span>Báo cáo & Thống kê</span>
+                </NavLink>
+              )}
+              {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('alerts:read')) && (
+                <NavLink to="/alerts" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Bell size={20} />
+                  <span>Cảnh báo Kho hàng</span>
+                  {unreadCount > 0 && (
+                    <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: '#fff', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, minWidth: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
+                      {unreadCount}
+                    </span>
+                  )}
+                </NavLink>
+              )}
             </>
           )}
 
-          {/* Nhóm 5: Quản Trị Hệ Thống (Dành cho Admin) */}
-          {user?.role === 'Admin' && (
+          {/* Nhóm 5: Quản Trị Hệ Thống */}
+          {(user?.role === 'Admin' || hasPermission('users:read') || hasPermission('system:read')) && (
             <>
               <div className="nav-section-title">Quản Trị Hệ Thống</div>
-              <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Users size={20} />
-                <span>Quản lý Người dùng</span>
-              </NavLink>
-              <NavLink to="/role-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Shield size={20} />
-                <span>Phân quyền Vai trò</span>
-              </NavLink>
-              <NavLink to="/system-health" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Activity size={20} />
-                <span>Giám sát Hệ thống</span>
-              </NavLink>
+              {(user?.role === 'Admin' || hasPermission('users:read')) && (
+                <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Users size={20} />
+                  <span>Quản lý Người dùng</span>
+                </NavLink>
+              )}
+              {user?.role === 'Admin' && (
+                <NavLink to="/role-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Shield size={20} />
+                  <span>Phân quyền Vai trò</span>
+                </NavLink>
+              )}
+              {(user?.role === 'Admin' || hasPermission('system:read')) && (
+                <NavLink to="/system-health" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Activity size={20} />
+                  <span>Giám sát Hệ thống</span>
+                </NavLink>
+              )}
             </>
           )}
         </nav>
@@ -187,6 +212,31 @@ const Layout = () => {
 
       {/* Main Content */}
       <main className="main-content">
+        {connectionWarning && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid #ef4444',
+            color: '#f87171',
+            padding: '0.65rem 1.25rem',
+            borderRadius: '8px',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '0.88rem',
+            fontWeight: 600,
+            animation: 'fadeIn 0.3s ease'
+          }}>
+            <span>⚠️ {connectionWarning}</span>
+            <button
+              onClick={() => setConnectionWarning('')}
+              style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem' }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <header className="top-header">
           <div className="header-title">
             <h1 className="text-title" style={{ fontSize: '1.5rem', marginBottom: 0 }}>Xin chào trở lại, {user?.fullname || user?.email} 👋</h1>
