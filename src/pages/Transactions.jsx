@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
 import {
   Plus, Search, Download, Calendar, ChevronDown, ChevronUp, ChevronRight,
-  FileText, ArrowRight, ArrowDownCircle, ArrowUpCircle, Repeat, SlidersHorizontal, Info, X
+  FileText, ArrowRight, ArrowDownCircle, ArrowUpCircle, Repeat, SlidersHorizontal, Info, X,
+  Activity, ShieldCheck, AlertCircle, CheckCircle2
 } from 'lucide-react';
 
 const PAGE_SIZE = 10;
@@ -31,6 +32,11 @@ const Transactions = () => {
   const [showModal, setShowModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [productSearch, setProductSearch] = useState('');
+
+  // Saga Inspection Modal State
+  const [selectedSaga, setSelectedSaga] = useState(null);
+  const [sagaModalOpen, setSagaModalOpen] = useState(false);
+  const [sagaLoading, setSagaLoading] = useState(false);
   const [newTransaction, setNewTransaction] = useState({
     productId: '',
     type: 'OUTBOUND',
@@ -197,6 +203,20 @@ const Transactions = () => {
       document.body.removeChild(link);
     } catch (err) {
       alert('Xuất file CSV thất bại: ' + err.message);
+    }
+  };
+
+  const handleViewSaga = async (txId) => {
+    setSagaLoading(true);
+    setSagaModalOpen(true);
+    setSelectedSaga(null);
+    try {
+      const res = await apiClient.get(`/transactions/${txId}/saga`);
+      setSelectedSaga(res.data);
+    } catch (err) {
+      console.error('Failed to fetch saga:', err);
+    } finally {
+      setSagaLoading(false);
     }
   };
 
@@ -580,7 +600,26 @@ const Transactions = () => {
                                           </div>
                                         </div>
 
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                          <button
+                                            className="btn btn-outline"
+                                            style={{
+                                              padding: '0.4rem 0.8rem',
+                                              fontSize: '0.8rem',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '0.35rem',
+                                              borderColor: 'var(--accent-primary)',
+                                              color: 'var(--accent-primary)',
+                                              background: 'rgba(59, 130, 246, 0.08)',
+                                            }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleViewSaga(tx.id);
+                                            }}
+                                          >
+                                            <Activity size={14} /> Tiến Trình Saga
+                                          </button>
                                           <button
                                             className="btn btn-outline"
                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
@@ -882,6 +921,165 @@ const Transactions = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* SAGA ORCHESTRATION INSPECTION MODAL */}
+      {sagaModalOpen && ReactDOM.createPortal(
+        <div style={modalBackdropStyle} onClick={() => setSagaModalOpen(false)}>
+          <div
+            className="glass-card animate-scale-up"
+            style={{
+              width: '100%',
+              maxWidth: '680px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '1.75rem',
+              background: 'var(--bg-card, #1e293b)',
+              borderRadius: '16px',
+              border: '1px solid var(--border-color, #334155)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color, #334155)', paddingBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{ padding: '0.5rem', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
+                  <Activity size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Tiến Trình Saga Orchestrator</h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Nhật ký điều phối giao dịch phân tán & bù trừ tự động
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setSagaModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            {sagaLoading ? (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-secondary)' }}>
+                Đang truy vấn trạng thái Saga từ Transaction Service...
+              </div>
+            ) : !selectedSaga ? (
+              <div style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
+                <AlertCircle size={40} color="#f59e0b" style={{ margin: '0 auto 1rem' }} />
+                <h4 style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Không tìm thấy bản ghi Saga</h4>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Giao dịch này được tạo trước khi tích hợp Saga Pattern hoặc không có phiên điều phối tương ứng.
+                </p>
+              </div>
+            ) : (
+              <div>
+                {/* Status Badges Header */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                  <div style={{ padding: '0.75rem', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color, #334155)' }}>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Trạng Thái Saga</div>
+                    <div style={{ marginTop: '0.25rem', fontWeight: 700, fontSize: '0.95rem', color: selectedSaga.status === 'COMPLETED' ? '#10b981' : selectedSaga.status === 'COMPENSATED' ? '#f59e0b' : '#ef4444' }}>
+                      {selectedSaga.status === 'COMPLETED' && '✅ COMPLETED'}
+                      {selectedSaga.status === 'COMPENSATED' && '🛡️ COMPENSATED (Đã Bù Trừ)'}
+                      {selectedSaga.status === 'FAILED' && '❌ FAILED'}
+                      {selectedSaga.status === 'IN_PROGRESS' && '⏳ IN_PROGRESS'}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '0.75rem', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color, #334155)' }}>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Loại Nghiệp Vụ</div>
+                    <div style={{ marginTop: '0.25rem', fontWeight: 700, fontSize: '0.95rem' }}>
+                      {selectedSaga.sagaType}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '0.75rem', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color, #334155)' }}>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Bước Hiện Tại</div>
+                    <div style={{ marginTop: '0.25rem', fontWeight: 700, fontSize: '0.95rem', fontFamily: 'monospace' }}>
+                      {selectedSaga.currentStep}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Error Banner if any */}
+                {selectedSaga.errorMessage && (
+                  <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                    <b>Thông báo lỗi / Bù trừ:</b> {selectedSaga.errorMessage}
+                  </div>
+                )}
+
+                {/* Step Logs Timeline */}
+                <div>
+                  <h4 style={{ margin: '0 0 0.85rem', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ShieldCheck size={16} color="#3b82f6" /> Lịch Sử Thực Thi Từng Bước (Step Logs)
+                  </h4>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                    {(selectedSaga.stepLogs || []).map((log, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: '0.85rem 1rem',
+                          borderRadius: '10px',
+                          background: log.status === 'FAILED' ? 'rgba(239, 68, 68, 0.08)' : log.status === 'COMPENSATED' ? 'rgba(245, 158, 11, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                          border: `1px solid ${log.status === 'FAILED' ? 'rgba(239, 68, 68, 0.3)' : log.status === 'COMPENSATED' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                            Bước {idx + 1}: [{log.step}]
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: log.status === 'SUCCESS' ? '#10b981' : log.status === 'COMPENSATED' ? '#f59e0b' : '#ef4444',
+                              color: '#fff',
+                            }}
+                          >
+                            {log.status}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                          {log.action}
+                        </div>
+                        {log.error && (
+                          <div style={{ fontSize: '0.8rem', color: '#ef4444', fontStyle: 'italic' }}>
+                            Lỗi: {log.error}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                          Thời gian: {new Date(log.timestamp).toLocaleString('vi-VN')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Saga Details Footer */}
+                <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color, #334155)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                    Saga ID: {selectedSaga.id}
+                  </div>
+                  <button className="btn btn-primary" onClick={() => setSagaModalOpen(false)} style={{ padding: '0.4rem 1.2rem', fontSize: '0.85rem' }}>
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>,
         document.body
