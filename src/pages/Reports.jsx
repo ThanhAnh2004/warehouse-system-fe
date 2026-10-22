@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Download, Printer, Database, Package, ArrowUpRight, ArrowDownRight, Layers, AlertTriangle, TrendingUp, Calendar, DollarSign, Award, ShoppingBag, FileText } from 'lucide-react';
 import apiClient from '../api/client';
 import * as XLSX from 'xlsx';
@@ -19,7 +19,7 @@ const Reports = () => {
   const [transactions, setTransactions] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [monthFilter, setMonthFilter] = useState('CURRENT'); // 'CURRENT', 'PREVIOUS', 'ALL'
+  const [monthFilter, setMonthFilter] = useState('CURRENT');
 
   useEffect(() => {
     fetchAllReportData();
@@ -59,23 +59,34 @@ const Reports = () => {
     }
   };
 
+  // Lấy danh sách tất cả các tháng có dữ liệu trong transactions, xếp từ mới nhất đến cũ nhất
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set();
+    transactions.forEach(t => {
+      if (t.createdAt) {
+        const d = new Date(t.createdAt);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        monthsSet.add(`${y}-${m}`);
+      }
+    });
+    return Array.from(monthsSet).sort().reverse();
+  }, [transactions]);
+
+  useEffect(() => {
+    if (availableMonths.length > 0 && (monthFilter === 'CURRENT' || !availableMonths.includes(monthFilter))) {
+      setMonthFilter(availableMonths[0]);
+    }
+  }, [availableMonths]);
+
   // Filter transactions based on selected month
   const getFilteredTransactions = () => {
-    const now = new Date();
-    const currYear = now.getFullYear();
-    const currMonth = now.getMonth(); // 0-indexed
-
+    if (monthFilter === 'ALL') return transactions;
     return transactions.filter(t => {
       if (!t.createdAt) return false;
       const d = new Date(t.createdAt);
-      if (monthFilter === 'CURRENT') {
-        return d.getFullYear() === currYear && d.getMonth() === currMonth;
-      }
-      if (monthFilter === 'PREVIOUS') {
-        const prevMonthDate = new Date(currYear, currMonth - 1, 1);
-        return d.getFullYear() === prevMonthDate.getFullYear() && d.getMonth() === prevMonthDate.getMonth();
-      }
-      return true;
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return ym === monthFilter;
     });
   };
 
@@ -129,9 +140,11 @@ const Reports = () => {
 
   // Multi-Sheet Excel Export with formatted currency and auto column widths
   const exportMultiSheetExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    const monthLabel = monthFilter === 'CURRENT' ? 'Tháng 8/2026' : monthFilter === 'PREVIOUS' ? 'Tháng 7/2026' : 'Toàn Thời Gian';
+    const monthLabel = monthFilter === 'ALL'
+      ? 'Toàn Thời Gian'
+      : monthFilter.includes('-')
+      ? `Tháng ${monthFilter.split('-')[1]}/${monthFilter.split('-')[0]}`
+      : monthFilter;
 
     // Sheet 1: Báo Cáo Thống Kê Theo Tháng
     const summaryRows = [
@@ -226,8 +239,14 @@ const Reports = () => {
               className="form-input"
               style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem', border: 'none', background: 'transparent', fontWeight: 700, color: 'var(--accent-primary)', cursor: 'pointer' }}
             >
-              <option value="CURRENT">Tháng Này (Tháng 8/2026)</option>
-              <option value="PREVIOUS">Tháng Trước (Tháng 7/2026)</option>
+              {availableMonths.map(ym => {
+                const [year, month] = ym.split('-');
+                return (
+                  <option key={ym} value={ym}>
+                    Tháng {month}/{year}
+                  </option>
+                );
+              })}
               <option value="ALL">Toàn Thời Gian</option>
             </select>
           </div>
