@@ -32,13 +32,10 @@ apiClient.interceptors.response.use(
     }
 
     if (error.response && error.response.status === 401) {
-      // Chỉ logout khi token hết hạn thực sự
-      const msg = error.response.data?.message || '';
-      if (msg.includes('hết hạn') || msg.includes('không hợp lệ') || msg.includes('Missing') || msg.includes('Unauthorized')) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.dispatchEvent(new Event('auth:unauthorized'));
-      }
+      // Tự động dọn dẹp token hết hạn / không hợp lệ và chuyển về màn hình đăng nhập
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.dispatchEvent(new Event('auth:unauthorized'));
     }
     return Promise.reject(error);
   }
