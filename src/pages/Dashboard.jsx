@@ -180,9 +180,11 @@ const Dashboard = () => {
     }
   };
 
-  // Zone capacity metric helper
-  const getZoneMetric = (prefix) => {
-    const locs = locations.filter(l => l.code.startsWith(prefix));
+  // Zone capacity metric helper theo 3 phân khu chức năng chuẩn của kho
+  const getZoneMetricByZoneType = (zoneType, rackCodes) => {
+    const locs = locations.filter(l => 
+      l.zone === zoneType || (rackCodes && rackCodes.some(prefix => l.code.startsWith(prefix)))
+    );
     if (locs.length === 0) return { count: 0, used: 0, max: 100, rate: 0 };
     const used = locs.reduce((sum, l) => sum + (l.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0), 0);
     const max = locs.reduce((sum, l) => sum + (l.maxCapacity || 60), 0);
@@ -190,10 +192,12 @@ const Dashboard = () => {
     return { count: locs.length, used, max, rate };
   };
 
-  const zoneA = getZoneMetric('A');
-  const zoneB = getZoneMetric('B');
-  const zoneC = getZoneMetric('C');
-  const zoneD = getZoneMetric('D');
+  // 1. Khu Nhặt Hàng Nhanh (Kệ A1 & A2 - 6 Tầng A01 -> A06)
+  const zoneHighVal = getZoneMetricByZoneType('ZONE-HIGH-VAL', ['A']);
+  // 2. Khu Luân Chuyển Vừa (Kệ B1 & B2 - 8 Tầng B01 -> B08)
+  const zoneLargeAppliance = getZoneMetricByZoneType('ZONE-LARGE-APPLIANCE', ['B']);
+  // 3. Khu Mật Độ Cao (Kệ C & Kệ D - 7 Tầng C01 -> C04 & D01 -> D03)
+  const zoneAccessories = getZoneMetricByZoneType('ZONE-ACCESSORIES', ['C', 'D']);
 
   const chartData = reportData ? {
     labels: ['Tổng Nhập Kho', 'Tổng Xuất Kho'],
@@ -396,72 +400,56 @@ const Dashboard = () => {
           <Layers size={24} color="var(--accent-primary)" />
           <div>
             <h3 className="text-title" style={{ fontSize: '1.15rem', margin: 0 }}>Tổng Quan Tỷ Lệ Lấp Đầy Kho (Rack Capacity Overview)</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Phân bố dung lượng không gian lưu trữ hiện tại theo 4 phân khu kệ kho chính</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Phân bố dung lượng không gian lưu trữ hiện tại theo đúng 3 phân khu kệ kho chức năng</p>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-          {/* ZONE A */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+          {/* PHÂN KHU 1: KHU NHẶT HÀNG NHANH */}
           <div style={{ padding: '1rem', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#10b981' }}>[KỆ A] HÀNG GIÁ TRỊ CAO</span>
-              <span className="badge" style={{ background: '#10b981', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneA.rate}% sử dụng</span>
+              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#10b981' }}>KHU NHẶT HÀNG NHANH (KỆ A1 & A2)</span>
+              <span className="badge" style={{ background: '#10b981', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneHighVal.rate}% sử dụng</span>
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>6 Tầng A01 ➔ A06 (Laptop & Smartphones)</div>
             <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.4rem' }}>
-              <div style={{ width: `${zoneA.rate}%`, height: '100%', background: '#10b981' }}></div>
+              <div style={{ width: `${zoneHighVal.rate}%`, height: '100%', background: '#10b981' }}></div>
             </div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Đã lưu: <b>{zoneA.used} món</b></span>
-              <span>Còn trống: <b style={{ color: '#10b981' }}>{Math.max(0, zoneA.max - zoneA.used)} chỗ</b></span>
+              <span>Đã lưu: <b>{zoneHighVal.used} món</b></span>
+              <span>Còn trống: <b style={{ color: '#10b981' }}>{Math.max(0, zoneHighVal.max - zoneHighVal.used)} chỗ</b></span>
             </div>
           </div>
 
-          {/* ZONE B */}
+          {/* PHÂN KHU 2: KHU LUÂN CHUYỂN VỪA */}
           <div style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#3b82f6' }}>[KỆ B] ĐIỆN TỬ CỠ LỚN</span>
-              <span className="badge" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneB.rate}% sử dụng</span>
+              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#3b82f6' }}>KHU LUÂN CHUYỂN VỪA (KỆ B1 & B2)</span>
+              <span className="badge" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneLargeAppliance.rate}% sử dụng</span>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>8 Tầng B01 ➔ B08 (Tivi & Tủ Lạnh)</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>8 Tầng B01 ➔ B08 (Tivi, Tủ Lạnh & Máy Giặt)</div>
             <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.4rem' }}>
-              <div style={{ width: `${zoneB.rate}%`, height: '100%', background: '#3b82f6' }}></div>
+              <div style={{ width: `${zoneLargeAppliance.rate}%`, height: '100%', background: '#3b82f6' }}></div>
             </div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Đã lưu: <b>{zoneB.used} món</b></span>
-              <span>Còn trống: <b style={{ color: '#3b82f6' }}>{Math.max(0, zoneB.max - zoneB.used)} chỗ</b></span>
+              <span>Đã lưu: <b>{zoneLargeAppliance.used} món</b></span>
+              <span>Còn trống: <b style={{ color: '#3b82f6' }}>{Math.max(0, zoneLargeAppliance.max - zoneLargeAppliance.used)} chỗ</b></span>
             </div>
           </div>
 
-          {/* ZONE C */}
+          {/* PHÂN KHU 3: KHU MẬT ĐỘ CAO */}
           <div style={{ padding: '1rem', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#8b5cf6' }}>[KỆ C] KHU MẬT ĐỘ CAO</span>
-              <span className="badge" style={{ background: '#8b5cf6', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneC.rate}% sử dụng</span>
+              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#8b5cf6' }}>KHU MẬT ĐỘ CAO (KỆ C & KỆ D)</span>
+              <span className="badge" style={{ background: '#8b5cf6', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneAccessories.rate}% sử dụng</span>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>4 Tầng C01 ➔ C04 (Bàn phím & Tai nghe)</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>7 Tầng C01 ➔ C04 & D01 ➔ D03 (Phụ Kiện & Bảo Hành)</div>
             <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.4rem' }}>
-              <div style={{ width: `${zoneC.rate}%`, height: '100%', background: '#8b5cf6' }}></div>
+              <div style={{ width: `${zoneAccessories.rate}%`, height: '100%', background: '#8b5cf6' }}></div>
             </div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Đã lưu: <b>{zoneC.used} món</b></span>
-              <span>Còn trống: <b style={{ color: '#8b5cf6' }}>{Math.max(0, zoneC.max - zoneC.used)} chỗ</b></span>
-            </div>
-          </div>
-
-          {/* ZONE D */}
-          <div style={{ padding: '1rem', background: 'rgba(6, 182, 212, 0.08)', border: '1px solid rgba(6, 182, 212, 0.3)', borderRadius: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#06b6d4' }}>[KỆ D] PHÒNG SẠCH ESD</span>
-              <span className="badge" style={{ background: '#06b6d4', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneD.rate}% sử dụng</span>
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>2 Tầng D01 ➔ D02 (Vi Xử Lý & Chipset)</div>
-            <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.4rem' }}>
-              <div style={{ width: `${zoneD.rate}%`, height: '100%', background: '#06b6d4' }}></div>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Đã lưu: <b>{zoneD.used} món</b></span>
-              <span>Còn trống: <b style={{ color: '#06b6d4' }}>{Math.max(0, zoneD.max - zoneD.used)} chỗ</b></span>
+              <span>Đã lưu: <b>{zoneAccessories.used} món</b></span>
+              <span>Còn trống: <b style={{ color: '#8b5cf6' }}>{Math.max(0, zoneAccessories.max - zoneAccessories.used)} chỗ</b></span>
             </div>
           </div>
         </div>
@@ -490,41 +478,6 @@ const Dashboard = () => {
             {chartData && <Bar options={chartOptions} data={chartData} />}
           </div>
         </>
-      )}
-
-      {/* ============ DEMAND FORECAST CHARTS ============ */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', margin: '2.5rem 0 1.25rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <TrendingUp size={24} color="var(--accent-primary)" />
-          <h2 className="text-title" style={{ marginBottom: 0 }}>Biểu Đồ Dự Đoán Nhu Cầu Tiêu Thụ</h2>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Thời gian dự báo:</span>
-          <select
-            value={forecastDays}
-            onChange={(e) => setForecastDays(Number(e.target.value))}
-            className="form-input"
-            style={{ width: 'auto', padding: '0.4rem 0.85rem', fontSize: '0.85rem' }}
-          >
-            <option value={7}>7 ngày tới</option>
-            <option value={14}>14 ngày tới</option>
-            <option value={30}>30 ngày tới</option>
-          </select>
-        </div>
-      </div>
-
-      {forecastLoading ? (
-        <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-          Đang tính toán dữ liệu dự báo nhu cầu...
-        </div>
-      ) : hasForecast ? (
-        <div className="glass-card" style={{ marginBottom: '1rem' }}>
-          <Line options={forecastChartOptions} data={forecastChartData} />
-        </div>
-      ) : (
-        <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-          Chưa đủ dữ liệu lịch sử giao dịch xuất kho để tạo biểu đồ dự báo nhu cầu.
-        </div>
       )}
 
       {/* LOW STOCK ITEMS MODAL */}

@@ -4,10 +4,16 @@ import apiClient from '../api/client';
 import { Layers, RefreshCw, Search, Plus, Edit2, Trash2, X, Save, AlertTriangle } from 'lucide-react';
 
 const ZONE_TRANSLATIONS = {
-  'ZONE-HIGH-VAL': { label: 'Khu Hàng Giá Trị Cao', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' },
-  'ZONE-LARGE-APPLIANCE': { label: 'Khu Điện Tử Cỡ Lớn', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' },
-  'ZONE-ACCESSORIES': { label: 'Khu Linh Kiện & Phụ Kiện', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)' },
-  'ZONE-ESD-TEMP': { label: 'Khu Chống Tĩnh Điện ESD', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.12)' },
+  'ZONE-ACCESSORIES': { label: 'Khu Mật Độ Cao (Kệ C & Kệ D)', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)' },
+  'ZONE-LARGE-APPLIANCE': { label: 'Khu Luân Chuyển Vừa (Kệ B1 & Kệ B2)', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' },
+  'ZONE-HIGH-VAL': { label: 'Khu Nhặt Hàng Nhanh (Kệ A1 & Kệ A2)', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' },
+};
+
+const getZoneMeta = (zoneKey) => {
+  if (zoneKey === 'ZONE-SERVICE-RMA' || zoneKey === 'ZONE-ESD-TEMP') {
+    return ZONE_TRANSLATIONS['ZONE-ACCESSORIES'];
+  }
+  return ZONE_TRANSLATIONS[zoneKey] || { label: zoneKey, color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' };
 };
 
 const LocationManagement = () => {
@@ -24,9 +30,11 @@ const LocationManagement = () => {
 
   const [form, setForm] = useState({
     code: '',
-    zone: 'ZONE-ACCESSORIES',
-    aisle: 'Kệ A',
-    maxCapacity: 60,
+    zone: 'ZONE-HIGH-VAL',
+    aisle: 'A',
+    rack: 'Kệ A1',
+    shelfLevel: 1,
+    maxCapacity: 300,
     maxWeightKg: 500,
     description: '',
   });
@@ -61,10 +69,12 @@ const LocationManagement = () => {
 
   const handleOpenAdd = () => {
     setForm({
-      code: '',
-      zone: 'ZONE-ACCESSORIES',
-      aisle: 'Kệ A',
-      maxCapacity: 60,
+      code: 'A1-L4',
+      zone: 'ZONE-HIGH-VAL',
+      aisle: 'A',
+      rack: 'Kệ A1',
+      shelfLevel: 4,
+      maxCapacity: 300,
       maxWeightKg: 500,
       description: '',
     });
@@ -75,8 +85,10 @@ const LocationManagement = () => {
     setEditingLoc(loc);
     setForm({
       code: loc.code || '',
-      zone: loc.zone || 'ZONE-ACCESSORIES',
-      aisle: loc.aisle || 'Dãy A',
+      zone: loc.zone || 'ZONE-HIGH-VAL',
+      aisle: loc.aisle || 'A',
+      rack: loc.rack || `Kệ ${loc.aisle || 'A1'}`,
+      shelfLevel: loc.shelfLevel || 1,
       maxCapacity: loc.maxCapacity || 300,
       maxWeightKg: loc.maxWeightKg || 500,
       description: loc.description || '',
@@ -193,7 +205,8 @@ const LocationManagement = () => {
   };
 
   const filteredLocations = locations.filter(loc => {
-    const matchesZone = selectedZone === 'ALL' || loc.zone === selectedZone;
+    const normZone = loc.zone === 'ZONE-ESD-TEMP' ? 'ZONE-SERVICE-RMA' : loc.zone;
+    const matchesZone = selectedZone === 'ALL' || loc.zone === selectedZone || normZone === selectedZone;
     const matchesSearch = matchLocationSearch(loc, searchTerm);
     return matchesZone && matchesSearch;
   });
@@ -277,12 +290,12 @@ const LocationManagement = () => {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Mã Kệ (Rack)</th>
-              <th>Vị Trí Tầng (Level Code)</th>
               <th>Phân Khu (Zone)</th>
-              <th>Sức Chứa Tầng</th>
-              <th>Tải Trọng Tối Đa</th>
-              <th>Trạng Thái Không Gian Tầng</th>
+              <th>Kệ Hàng (Rack)</th>
+              <th>Vị Trí Tầng (Level)</th>
+              <th>Mặt Hàng Lưu Trữ (Multi-SKU)</th>
+              <th>Sức Chứa & Tải Trọng</th>
+              <th>Trạng Thái Không Gian</th>
               <th style={{ textAlign: 'center', width: '90px' }}>Thao Tác</th>
             </tr>
           </thead>
@@ -290,7 +303,7 @@ const LocationManagement = () => {
             {loading ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                  Đang tải danh mục Tầng kho...
+                  Đang tải danh mục Kệ & Tầng kho...
                 </td>
               </tr>
             ) : filteredLocations.length === 0 ? (
@@ -301,22 +314,31 @@ const LocationManagement = () => {
               </tr>
             ) : (
               filteredLocations.map(loc => {
-                const zMeta = ZONE_TRANSLATIONS[loc.zone] || { label: loc.zone, color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' };
+                const zMeta = getZoneMeta(loc.zone);
                 const currentCount = loc.currentItemsCount || 0;
                 const remaining = loc.maxCapacity - currentCount;
                 const rate = loc.occupancyRate || 0;
                 const isFull = rate >= 100;
                 const isHigh = rate >= 80;
 
-                const rackName = loc.aisle ? (loc.aisle.startsWith('Kệ') || loc.aisle.startsWith('Dãy') ? loc.aisle : `Kệ ${loc.aisle}`) : `Kệ ${loc.code[0] || 'A'}`;
+                const rackName = loc.rack || (loc.aisle ? (loc.aisle.startsWith('Kệ') || loc.aisle.startsWith('Dãy') ? loc.aisle : `Kệ ${loc.aisle}`) : `Kệ ${loc.code[0] || 'A'}`);
+                const skuCount = loc.items?.length || 0;
 
                 return (
                   <tr key={loc.id}>
                     <td>
-                      <span style={{ fontWeight: 700, fontSize: '1rem', color: '#60a5fa' }}>{rackName}</span>
+                      <span className="badge" style={{ background: zMeta.bg, color: zMeta.color, fontWeight: 700, padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem' }}>
+                        {zMeta.label}
+                      </span>
                     </td>
                     <td>
-                      <code style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-primary)' }}>Tầng {loc.code}</code>
+                      <span style={{ fontWeight: 800, fontSize: '1rem', color: '#60a5fa' }}>{rackName}</span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc' }}>Tầng {loc.shelfLevel || 1}</span>
+                        <code style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--accent-primary)', background: 'rgba(99, 102, 241, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>[{loc.code}]</code>
+                      </div>
                       {loc.description && (
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                           {loc.description}
@@ -324,24 +346,35 @@ const LocationManagement = () => {
                       )}
                     </td>
                     <td>
-                      <span className="badge" style={{ background: zMeta.bg, color: zMeta.color, fontWeight: 700, padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem' }}>
-                        {zMeta.label}
-                      </span>
+                      {skuCount > 0 ? (
+                        <div>
+                          <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontWeight: 700, fontSize: '0.75rem' }}>
+                            📦 {skuCount} mặt hàng ({currentCount} SP)
+                          </span>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '3px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {loc.items.map(it => it.productName).join(', ')}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Tầng trống (0 SP)</span>
+                      )}
                     </td>
-                    <td style={{ fontWeight: 700 }}>{loc.maxCapacity} sản phẩm</td>
-                    <td>{Number(loc.maxWeightKg).toFixed(2)} kg</td>
+                    <td>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{loc.maxCapacity} sản phẩm</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tối đa {Number(loc.maxWeightKg).toFixed(0)} kg</div>
+                    </td>
                     <td>
                       {isFull ? (
                         <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                          🔴 ĐÃ ĐẦY TẦNG (100%)
+                          🔴 ĐÃ ĐẦY (100%)
                         </span>
                       ) : isHigh ? (
                         <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                          🟡 SẮP ĐẦY (Còn trống {remaining} ô - {rate}%)
+                          🟡 SẮP ĐẦY (Trống {remaining} ô - {rate}%)
                         </span>
                       ) : (
                         <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                          🟢 CÒN TRỐNG {remaining} Ô ({rate}% đã dùng)
+                          🟢 CÒN TRỐNG {remaining} Ô ({rate}%)
                         </span>
                       )}
                     </td>
@@ -351,7 +384,7 @@ const LocationManagement = () => {
                           className="btn btn-outline"
                           style={{ padding: '5px 7px', fontSize: '0.75rem', background: 'transparent' }}
                           onClick={() => handleOpenEdit(loc)}
-                          title="Sửa kệ"
+                          title="Sửa tầng"
                         >
                           <Edit2 size={14} color="var(--accent-primary)" />
                         </button>
@@ -359,7 +392,7 @@ const LocationManagement = () => {
                           className="btn btn-outline"
                           style={{ padding: '5px 7px', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
                           onClick={() => setDeletingLoc(loc)}
-                          title="Xóa kệ"
+                          title="Xóa tầng"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -418,49 +451,74 @@ const LocationManagement = () => {
             </div>
 
             <form onSubmit={editingLoc ? handleSaveEdit : handleSaveAdd} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mã Vị Trí Tầng (Level Code)</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Ví dụ: A07, B09, C05..."
-                  value={form.code}
-                  onChange={(e) => {
-                    const val = e.target.value.toUpperCase();
-                    setForm({
-                      ...form,
-                      code: val,
-                      aisle: val ? (val[0] === 'A' ? 'Kệ A' : val[0] === 'B' ? 'Kệ B' : val[0] === 'C' ? 'Kệ C' : val[0] === 'D' ? 'Kệ D' : `Kệ ${val[0]}`) : form.aisle,
-                    });
-                  }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Phân Khu Chuyên Dụng (Zone)</label>
-                <select className="form-input" value={form.zone} onChange={(e) => setForm({ ...form, zone: e.target.value })}>
-                  {Object.entries(ZONE_TRANSLATIONS).map(([zKey, zMeta]) => (
-                    <option key={zKey} value={zKey}>{zMeta.label} ({zKey})</option>
-                  ))}
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Phân Khu (Zone)</label>
+                  <select className="form-input" value={form.zone} onChange={(e) => setForm({ ...form, zone: e.target.value })}>
+                    {Object.entries(ZONE_TRANSLATIONS).map(([zKey, zMeta]) => (
+                      <option key={zKey} value={zKey}>{zMeta.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tên Kệ Kho (Rack Name)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Ví dụ: Kệ A1, Kệ B2..."
+                    value={form.rack}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const rackCode = val.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                      setForm({
+                        ...form,
+                        rack: val,
+                        aisle: val ? val.replace(/^Kệ\s*/i, '').charAt(0) : form.aisle,
+                        code: `${rackCode || 'A1'}-L${form.shelfLevel || 1}`,
+                      });
+                    }}
+                    required
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tên Kệ Kho (Rack Name)</label>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Vị Trí Tầng (Shelf Level)</label>
                   <select
                     className="form-input"
-                    value={form.aisle}
-                    onChange={(e) => setForm({ ...form, aisle: e.target.value })}
+                    value={form.shelfLevel}
+                    onChange={(e) => {
+                      const lvl = Number(e.target.value);
+                      const rackCode = (form.rack || 'Kệ A1').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                      setForm({
+                        ...form,
+                        shelfLevel: lvl,
+                        code: `${rackCode || 'A1'}-L${lvl}`,
+                      });
+                    }}
                     required
                   >
-                    <option value="Kệ A">Kệ A</option>
-                    <option value="Kệ B">Kệ B</option>
-                    <option value="Kệ C">Kệ C</option>
-                    <option value="Kệ D">Kệ D</option>
+                    <option value={1}>Tầng 1 (Sát sàn / Dưới cùng)</option>
+                    <option value={2}>Tầng 2 (Tầm mắt - Bán chạy)</option>
+                    <option value={3}>Tầng 3 (Tầng trên)</option>
+                    <option value={4}>Tầng 4 (Tầng cao dự trữ)</option>
                   </select>
                 </div>
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mã Định Danh Tầng (Level Code)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Ví dụ: A1-L1, B2-L3..."
+                    value={form.code}
+                    onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Sức Chứa Tối Đa Tầng (SP)</label>
                   <input
@@ -472,27 +530,26 @@ const LocationManagement = () => {
                     required
                   />
                 </div>
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tải Trọng Tối Đa (kg)</label>
+                  <input
+                    type="number"
+                    min="50"
+                    step="0.01"
+                    className="form-input"
+                    value={form.maxWeightKg}
+                    onChange={(e) => setForm({ ...form, maxWeightKg: e.target.value })}
+                    required
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tải Trọng Tối Đa Tầng (kg)</label>
-                <input
-                  type="number"
-                  min="50"
-                  step="0.01"
-                  className="form-input"
-                  value={form.maxWeightKg}
-                  onChange={(e) => setForm({ ...form, maxWeightKg: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mô tả / Ghi chú về Tầng kho</label>
+                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mô tả & Công năng chuyên dụng của tầng</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Ví dụ: Tầng kính bảo vệ - Smartphone & Tablet..."
+                  placeholder="Ví dụ: Tủ kính an ninh - iPhone & Flagship smartphone..."
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />

@@ -1,7 +1,8 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import ErrorBoundary from './ErrorBoundary';
 import { AuthContext } from '../context/AuthContext';
-import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell, Trash2, Sun, Moon, Shield, Activity, ClipboardList, Map, Layers } from 'lucide-react';
+import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell, Trash2, Sun, Moon, Shield, Activity, ClipboardList, Map as MapIcon, Layers } from 'lucide-react';
 import apiClient from '../api/client';
 import './Layout.css';
 
@@ -130,7 +131,7 @@ const Layout = () => {
             <>
               <div className="nav-section-title">Mặt Bằng, Kệ & Tầng Kho</div>
               <NavLink to="/warehouse-map" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Map size={20} />
+                <MapIcon size={20} />
                 <span>Sơ đồ Kệ kho</span>
               </NavLink>
               <NavLink to="/locations" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -348,7 +349,9 @@ const Layout = () => {
       </header>
         
         <div className="page-container">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
     </div>
