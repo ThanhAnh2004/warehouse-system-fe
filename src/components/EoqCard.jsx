@@ -10,7 +10,11 @@ import {
   ArrowRight, 
   Info,
   Layers,
-  TrendingDown
+  TrendingDown,
+  BookOpen,
+  X,
+  HelpCircle,
+  Sparkles
 } from 'lucide-react';
 import apiClient from '../api/client';
 
@@ -23,15 +27,20 @@ const SERVICE_LEVEL_OPTIONS = [
   { label: '99% (Hàng trọng yếu/Đặc biệt - Z = 2.33)', value: 0.99, z: 2.33 },
 ];
 
-const EoqCard = ({ product, forecast }) => {
+const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta }) => {
   // Configurable parameters
   const [orderingCost, setOrderingCost] = useState(50000); // S (VNĐ/đơn)
   const [holdingRatePct, setHoldingRatePct] = useState(20); // H (% đơn giá/năm)
   const [leadTime, setLeadTime] = useState(7); // L (ngày chờ hàng về)
   const [serviceLevel, setServiceLevel] = useState(0.95); // Z-score
   const [showSettings, setShowSettings] = useState(false);
+  const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [isOrdering, setIsOrdering] = useState(false);
   const [orderSuccessMsg, setOrderSuccessMsg] = useState('');
+  const [isSyncingMin, setIsSyncingMin] = useState(false);
+  const [syncMinMsg, setSyncMinMsg] = useState('');
+
+  const isIncubating = forecastMeta?.status === 'INCUBATING' || (!forecast || forecast.length === 0);
 
   // 1. Phân tích chuỗi dự báo từ AI
   const quantities = forecast && forecast.length
@@ -53,7 +62,7 @@ const EoqCard = ({ product, forecast }) => {
 
   // 2. Thông số kinh tế & Tồn kho
   const unitPrice = Number(product?.price) || 0;
-  const currentStock = Number(product?.quantity) || 0;
+  const currentStock = passedStock !== undefined ? Number(passedStock) : (Number(product?.quantity) || 0);
   const holdingCostPerUnit = (holdingRatePct / 100) * unitPrice; // H
   const annualDemand = Math.max(1, avgDailyDemand * 365); // D
 
@@ -86,7 +95,24 @@ const EoqCard = ({ product, forecast }) => {
   let isReorderNeeded = false;
   let recommendedQty = 0;
 
-  if (projectedStock <= 0) {
+  if (isIncubating) {
+    const minStock = Number(product?.minStockLevel) || 20;
+    if (currentStock <= minStock) {
+      riskStatus = 'BELOW_ROP';
+      badgeColor = '#f59e0b';
+      statusTitle = 'DƯỚI ĐỊNH MỨC TỒN KHO TỐI THIỂU (Min Stock)';
+      statusDesc = `Sản phẩm mới đang trong thời gian tích lũy dữ liệu. Tồn kho hiện tại (${currentStock}) đang thấp hơn hoặc bằng ngưỡng tối thiểu Min (${minStock}). Khuyến nghị nhập thêm.`;
+      isReorderNeeded = true;
+      recommendedQty = Math.max(1, minStock * 2 - currentStock);
+    } else {
+      riskStatus = 'OPTIMAL';
+      badgeColor = '#10b981';
+      statusTitle = 'Tồn kho trên ngưỡng tối thiểu an toàn';
+      statusDesc = `Sản phẩm mới đang trong thời gian tích lũy dữ liệu. Tồn kho hiện tại (${currentStock}) lớn hơn ngưỡng tối thiểu (${minStock}).`;
+      isReorderNeeded = false;
+      recommendedQty = 0;
+    }
+  } else if (projectedStock <= 0) {
     riskStatus = 'CRITICAL_STOCKOUT';
     badgeColor = '#ef4444';
     statusTitle = 'NGUY CƠ THIẾU HÀNG TRẦM TRỌNG (Stockout Risk)';
@@ -128,6 +154,27 @@ const EoqCard = ({ product, forecast }) => {
       alert('Không thể tạo đề xuất bổ sung hàng: ' + (err.response?.data?.message || err.message));
     } finally {
       setIsOrdering(false);
+    }
+  };
+
+  // Đồng bộ ngưỡng Min Stock bằng ROP của AI
+  const handleSyncMinWithRop = async () => {
+    if (!product?.sku || reorderPoint <= 0 || isIncubating) return;
+    setIsSyncingMin(true);
+    try {
+      await apiClient.put(`/inventory/products/${product.sku}`, {
+        minStockLevel: reorderPoint
+      });
+      setSyncMinMsg(`Đã cập nhật Ngưỡng Min của sản phẩm thành ${reorderPoint} ${product.unit || 'món'} theo Điểm đặt hàng lại ROP!`);
+      setTimeout(() => setSyncMinMsg(''), 6000);
+      if (product) {
+        product.minStockLevel = reorderPoint;
+      }
+    } catch (err) {
+      console.error('Lỗi khi đồng bộ Min:', err);
+      alert('Không thể cập nhật Min Stock: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setIsSyncingMin(false);
     }
   };
 
@@ -308,6 +355,12 @@ const EoqCard = ({ product, forecast }) => {
         </div>
       )}
 
+      {syncMinMsg && (
+        <div style={{ padding: '0.75rem 1rem', background: '#6366f120', border: '1px solid #6366f1', borderRadius: '10px', color: '#6366f1', fontSize: '0.85rem', marginBottom: '1rem' }}>
+          ✓ {syncMinMsg}
+        </div>
+      )}
+
       {/* Metrics Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
         <MetricItem
@@ -319,40 +372,68 @@ const EoqCard = ({ product, forecast }) => {
 
         <MetricItem
           label="Tồn kho an toàn (Safety Stock)"
-          value={`${safetyStock} ${product?.unit || 'món'}`}
+          value={isIncubating ? 'Chờ dữ liệu' : `${safetyStock} ${product?.unit || 'món'}`}
           color="#3b82f6"
-          sub={`Z = ${zScore} · Độ lệch σ = ${stdDailyDemand.toFixed(1)}`}
-          highlight
+          sub={isIncubating ? 'Tự động kích hoạt sau 30 ngày' : `Z = ${zScore} · Độ lệch σ = ${stdDailyDemand.toFixed(1)}`}
+          highlight={!isIncubating}
         />
 
         <MetricItem
           label="Điểm đặt hàng lại (ROP)"
-          value={`${reorderPoint} ${product?.unit || 'món'}`}
+          value={isIncubating ? `Min: ${product?.minStockLevel || 20}` : `${reorderPoint} ${product?.unit || 'món'}`}
           color="#f59e0b"
-          sub={`Lead-time demand: ${leadTimeDemand.toFixed(1)}`}
+          sub={
+            isIncubating ? (
+              'Đang áp dụng định mức Min ban đầu'
+            ) : (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+                <span>Lead-time: {leadTimeDemand.toFixed(1)}</span>
+                {product?.minStockLevel !== reorderPoint && (
+                  <button
+                    type="button"
+                    onClick={handleSyncMinWithRop}
+                    disabled={isSyncingMin}
+                    style={{
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      border: '1px solid rgba(245, 158, 11, 0.4)',
+                      color: '#d97706',
+                      borderRadius: '4px',
+                      padding: '1px 5px',
+                      fontSize: '0.68rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                    title="Cập nhật ngưỡng Min của sản phẩm bằng ROP do AI tính toán"
+                  >
+                    {isSyncingMin ? '...' : 'Đặt làm Min'}
+                  </button>
+                )}
+              </span>
+            )
+          }
           highlight
         />
 
         <MetricItem
           label="Lượng đặt tối ưu (EOQ)"
-          value={`${eoq} ${product?.unit || 'món'}`}
+          value={isIncubating ? 'Chờ dữ liệu' : `${eoq} ${product?.unit || 'món'}`}
           color="#10b981"
-          sub="Cân bằng chi phí đặt & lưu kho"
-          highlight
+          sub={isIncubating ? 'Tính sau khi có nhu cầu năm' : "Cân bằng chi phí đặt & lưu kho"}
+          highlight={!isIncubating}
         />
 
         <MetricItem
           label="Nhu cầu TB (AI Dự Báo)"
-          value={`${avgDailyDemand.toFixed(1)}/ngày`}
+          value={isIncubating ? '0.0/ngày' : `${avgDailyDemand.toFixed(1)}/ngày`}
           color="var(--text-primary)"
-          sub={`Tổng ${quantities.length} ngày: ${totalForecastDemand.toFixed(0)}`}
+          sub={isIncubating ? 'Đang tích lũy 0/30 ngày' : `Tổng ${quantities.length} ngày: ${totalForecastDemand.toFixed(0)}`}
         />
 
         <MetricItem
           label="Tồn kho dự phóng"
-          value={`${projectedStock} ${product?.unit || 'món'}`}
-          color={projectedStock <= 0 ? '#ef4444' : 'var(--text-primary)'}
-          sub={`Sau ${quantities.length} ngày tới`}
+          value={isIncubating ? `${currentStock} ${product?.unit || 'món'}` : `${projectedStock} ${product?.unit || 'món'}`}
+          color={isIncubating ? 'var(--text-primary)' : (projectedStock <= 0 ? '#ef4444' : '#10b981')}
+          sub={isIncubating ? 'Bằng tồn kho thực tế' : 'Sau 7 ngày tới'}
         />
       </div>
 
@@ -367,14 +448,236 @@ const EoqCard = ({ product, forecast }) => {
         color: 'var(--text-secondary)',
         lineHeight: 1.6
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
-          <Info size={14} color="var(--accent-primary)" />
-          <span>Nguyên tắc quản trị tồn kho lý thuyết:</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <Info size={14} color="var(--accent-primary)" />
+            <span>Nguyên tắc quản trị tồn kho lý thuyết:</span>
+          </div>
+          <button 
+            onClick={() => setShowFormulaModal(true)}
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              color: '#3b82f6', 
+              fontSize: '0.8rem', 
+              cursor: 'pointer', 
+              fontWeight: 600, 
+              padding: 0,
+              textDecoration: 'underline'
+            }}
+          >
+            Xem chi tiết công thức & cách tính →
+          </button>
         </div>
-        • <b>Điểm đặt hàng lại (ROP = {reorderPoint}):</b> Trả lời câu hỏi <i>"Khi nào nên đặt?"</i>. Khi tồn kho giảm xuống bằng hoặc dưới ROP, hệ thống cảnh báo cần đặt hàng ngay.<br />
-        • <b>Lượng đặt hàng kinh tế (EOQ = {eoq}):</b> Trả lời câu hỏi <i>"Nên đặt bao nhiêu?"</i> để tổng chi phí lưu kho ({fmtVND(holdingCostPerUnit)}/năm) và chi phí đặt hàng ({fmtVND(orderingCost)}/đơn) là tối ưu nhất. <u>Không dùng EOQ làm ngưỡng đặt hàng</u>.<br />
-        • <b>Tồn kho an toàn (Safety Stock = {safetyStock}):</b> Đóng vai trò là gối đệm bảo hiểm bảo vệ kho trước sự biến động ngẫu nhiên của nhu cầu khách hàng.
+        • <b>Điểm đặt hàng lại (ROP = {isIncubating ? `Min ${product?.minStockLevel || 20}` : reorderPoint}):</b> Trả lời câu hỏi <i>"Khi nào nên đặt?"</i>. Khi tồn kho giảm xuống bằng hoặc dưới ROP, hệ thống cảnh báo cần đặt hàng ngay.<br />
+        • <b>Lượng đặt hàng kinh tế (EOQ = {isIncubating ? 'Chờ dữ liệu' : eoq}):</b> Trả lời câu hỏi <i>"Nên đặt bao nhiêu?"</i> để tổng chi phí lưu kho ({fmtVND(holdingCostPerUnit)}/năm) và chi phí đặt hàng ({fmtVND(orderingCost)}/đơn) là tối ưu nhất. <u>Không dùng EOQ làm ngưỡng đặt hàng</u>.<br />
+        • <b>Tồn kho an toàn (Safety Stock = {isIncubating ? 'Chờ dữ liệu' : safetyStock}):</b> Đóng vai trò là gối đệm bảo hiểm bảo vệ kho trước sự biến động ngẫu nhiên của nhu cầu khách hàng.
       </div>
+
+      {/* Formula & Explanation Modal */}
+      {showFormulaModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(5px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1.5rem'
+        }}>
+          <div style={{
+            background: 'var(--bg-secondary)',
+            color: 'var(--text-primary)',
+            width: '100%',
+            maxWidth: '840px',
+            maxHeight: '90vh',
+            borderRadius: '20px',
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '1.25rem 1.75rem',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'var(--bg-primary)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ padding: '0.5rem', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
+                  <Calculator size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
+                    Bảng Tra Cứu Công Thức & Cách Tính Thông Số Tồn Kho
+                  </h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Cơ sở toán học theo lý thuyết Quản trị Chuỗi Cung Ứng & Mô hình AI Demand Forecasting
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFormulaModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  padding: '0.4rem',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '1.75rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              
+              {/* Product Context Banner */}
+              <div style={{
+                padding: '0.9rem 1.25rem',
+                borderRadius: '12px',
+                background: 'rgba(59, 130, 246, 0.06)',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.75rem',
+                fontSize: '0.84rem'
+              }}>
+                <div><strong>Sản phẩm hiện tại:</strong> {product?.name} (SKU: {product?.sku})</div>
+                <div><strong>Đơn giá:</strong> {fmtVND(unitPrice)}</div>
+                <div><strong>Tồn kho On-hand:</strong> {currentStock} {product?.unit || 'món'}</div>
+              </div>
+
+              {/* 1. Nhu cầu TB & Độ biến động */}
+              <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ background: '#6366f1', color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>1</span>
+                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>Nhu Cầu Dự Báo Trung Bình (Average Daily Demand - d̄)</h4>
+                </div>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 1rem', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.95rem', margin: '0.5rem 0', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                  d̄ = (Tổng số lượng dự báo H ngày) / H
+                </div>
+                <ul style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  <li><b>Nguồn gốc:</b> Được suy luận trực tiếp từ <i>Mô hình AI Global XGBoost Regressor</i> dựa trên chu kỳ ngày trong tuần, ngày lễ và lịch sử tiêu thụ.</li>
+                  <li><b>Thay số thực tế:</b> Tổng 7 ngày tới dự báo = <b>{totalForecastDemand.toFixed(1)}</b> món → <code style={{ color: 'var(--accent-primary)' }}>d̄ = {totalForecastDemand.toFixed(1)} / 7 = {avgDailyDemand.toFixed(2)} món/ngày</code>.</li>
+                  <li><b>Độ biến động (σ_d):</b> Độ lệch chuẩn của chuỗi nhu cầu ngày = <b>{stdDailyDemand.toFixed(2)}</b> (đo lường mức độ thất thường của sức mua).</li>
+                </ul>
+              </div>
+
+              {/* 2. Safety Stock */}
+              <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ background: '#3b82f6', color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>2</span>
+                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>Tồn Kho An Toàn (Safety Stock - SS)</h4>
+                </div>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 1rem', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.95rem', margin: '0.5rem 0', color: '#3b82f6', fontWeight: 600 }}>
+                  SS = Z × σ_d × √L
+                </div>
+                <ul style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  <li><b>Ý nghĩa:</b> Lớp đệm bảo vệ kho hàng tránh bị đứt hàng khi khách hàng mua đột biến hoặc nhà cung ứng giao hàng trễ.</li>
+                  <li><b>Z (Hệ số dịch vụ):</b> {zScore} (Tương ứng với mức phục vụ khách hàng {selectedSL.label.split(' ')[0]}).</li>
+                  <li><b>L (Lead Time):</b> {leadTime} ngày (Thời gian từ lúc bấm đặt hàng đến lúc hàng nhập vào kho).</li>
+                  <li><b>Thay số thực tế:</b> <code style={{ color: '#3b82f6' }}>SS = {zScore} × {stdDailyDemand.toFixed(2)} × √{leadTime} = {(zScore * stdDailyDemand * Math.sqrt(leadTime)).toFixed(2)} → Làm tròn lên: {safetyStock} {product?.unit || 'món'}</code>.</li>
+                </ul>
+              </div>
+
+              {/* 3. Reorder Point (ROP) */}
+              <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ background: '#f59e0b', color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>3</span>
+                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>Điểm Đặt Hàng Lại (Reorder Point - ROP)</h4>
+                </div>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 1rem', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.95rem', margin: '0.5rem 0', color: '#f59e0b', fontWeight: 600 }}>
+                  ROP = (d̄ × L) + SS
+                </div>
+                <ul style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  <li><b>Ý nghĩa:</b> Trả lời câu hỏi <i>"Khi nào nên đặt hàng?"</i>. Khi tồn kho On-hand giảm chạm ngưỡng ROP, hệ thống sẽ tự động phát cảnh báo tái đặt hàng ngay.</li>
+                  <li><b>Nhu cầu trong thời gian chờ (Lead-time Demand):</b> d̄ × L = {avgDailyDemand.toFixed(2)} × {leadTime} = {leadTimeDemand.toFixed(2)} món.</li>
+                  <li><b>Thay số thực tế:</b> <code style={{ color: '#f59e0b' }}>ROP = {leadTimeDemand.toFixed(2)} + {safetyStock} = {(leadTimeDemand + safetyStock).toFixed(2)} → Làm tròn lên: {reorderPoint} {product?.unit || 'món'}</code>.</li>
+                  {isIncubating && (
+                    <li style={{ color: '#f59e0b', marginTop: '4px' }}>
+                      * <i>Lưu ý: Sản phẩm mới đang trong thời gian tích lũy dữ liệu nên tạm thời áp dụng ngưỡng Min Stock = {product?.minStockLevel || 20} làm ROP an toàn.</i>
+                    </li>
+                  )}
+                </ul>
+              </div>
+
+              {/* 4. Economic Order Quantity (EOQ) */}
+              <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>4</span>
+                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>Lượng Đặt Hàng Kinh Tế Tối Ưu (Economic Order Quantity - EOQ)</h4>
+                </div>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 1rem', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.95rem', margin: '0.5rem 0', color: '#10b981', fontWeight: 600 }}>
+                  EOQ = √ [ (2 × D × S) / H ]
+                </div>
+                <ul style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  <li><b>Ý nghĩa:</b> Trả lời câu hỏi <i>"Mỗi lần nên đặt bao nhiêu món?"</i> để <b>tổng chi phí đặt hàng + chi phí lưu kho</b> trong năm đạt mức thấp nhất (Mô hình kinh điển Ford W. Harris).</li>
+                  <li><b>D (Nhu cầu năm):</b> d̄ × 365 = {annualDemand.toFixed(0)} món/năm.</li>
+                  <li><b>S (Chi phí mỗi lần đặt hàng):</b> {fmtVND(orderingCost)} / đơn đặt.</li>
+                  <li><b>H (Chi phí lưu kho 1 đơn vị/năm):</b> {holdingRatePct}% × {fmtVND(unitPrice)} = {fmtVND(holdingCostPerUnit)} / món / năm.</li>
+                  <li><b>Thay số thực tế:</b> <code style={{ color: '#10b981' }}>EOQ = √ [ (2 × {annualDemand.toFixed(0)} × {orderingCost}) / {holdingCostPerUnit || 1} ] = {eoq} {product?.unit || 'món'}</code>.</li>
+                  <li style={{ color: '#ef4444' }}>
+                    ⚠️ <b>Nguyên tắc bắt buộc:</b> <u>Tuyệt đối không dùng EOQ làm điểm kích hoạt đặt hàng</u>, chỉ dùng EOQ làm số lượng đặt mỗi khi kho chạm mốc ROP.
+                  </li>
+                </ul>
+              </div>
+
+              {/* 5. Tồn kho dự phóng */}
+              <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ background: '#ec4899', color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>5</span>
+                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>Tồn Kho Dự Phóng (Projected Stock)</h4>
+                </div>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 1rem', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.95rem', margin: '0.5rem 0', color: '#ec4899', fontWeight: 600 }}>
+                  Tồn kho dự phóng = Tồn kho On-hand - Tổng nhu cầu dự báo kỳ tới
+                </div>
+                <ul style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  <li><b>Ý nghĩa:</b> Dự báo xem sau 7 ngày nữa trong kho còn bao nhiêu sản phẩm nếu không nhập thêm hàng.</li>
+                  <li><b>Thay số thực tế:</b> <code style={{ color: '#ec4899' }}>{currentStock} - {totalForecastDemand.toFixed(1)} = {projectedStock} món</code>.</li>
+                  <li>Nếu số này $\le 0$, hệ thống ngay lập tức kích hoạt cờ đỏ <b>NGUY CƠ THIẾU HÀNG TRẦM TRỌNG (Stockout Risk)</b> và tính toán số lượng cần bổ sung khẩn cấp.</li>
+                </ul>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '1rem 1.75rem',
+              borderTop: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              background: 'var(--bg-primary)'
+            }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowFormulaModal(false)}
+                style={{ padding: '0.5rem 1.5rem', fontWeight: 600 }}
+              >
+                Đã hiểu & Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

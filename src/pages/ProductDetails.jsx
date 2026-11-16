@@ -2,7 +2,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-import { ArrowLeft, TrendingUp, PackageSearch, Tag, Edit2, Trash2, Save, X } from 'lucide-react';
+import { ArrowLeft, TrendingUp, PackageSearch, Tag, Edit2, Trash2, Save, X, Clock, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
+import { calculateSuggestedMinStock } from '../utils/minStockCalculator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import EoqCard from '../components/EoqCard';
 
@@ -32,6 +33,7 @@ const ProductDetails = () => {
   const [product, setProduct] = useState(null);
   const [stock, setStock] = useState(0);
   const [forecast, setForecast] = useState([]);
+  const [forecastMeta, setForecastMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -62,8 +64,11 @@ const ProductDetails = () => {
         if (user?.role !== 'Staff') {
           try {
             const forecastRes = await apiClient.get(`/inventory/forecast/${prodData.id}`);
-            if (forecastRes.data && forecastRes.data.forecast) {
-              setForecast(forecastRes.data.forecast);
+            if (forecastRes.data) {
+              setForecastMeta(forecastRes.data);
+              if (forecastRes.data.forecast) {
+                setForecast(forecastRes.data.forecast);
+              }
             }
           } catch (e) {
             console.warn("Forecast not available yet or not enough data.");
@@ -233,9 +238,39 @@ const ProductDetails = () => {
                   </div>
 
                   <div>
-                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Ngưỡng Báo Thiếu (Min)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Ngưỡng Báo Thiếu (Min)</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const { suggestedMin } = calculateSuggestedMinStock({
+                            category: editForm.category,
+                            price: editForm.price,
+                            initialQuantity: editForm.quantity
+                          });
+                          setEditForm({ ...editForm, minStockLevel: suggestedMin });
+                        }}
+                        style={{
+                          background: 'rgba(99, 102, 241, 0.1)',
+                          border: '1px solid rgba(99, 102, 241, 0.3)',
+                          color: 'var(--accent-primary)',
+                          borderRadius: '6px',
+                          padding: '2px 8px',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Tự động tính toán Min dựa vào Ngành hàng & Giá bán"
+                      >
+                        <Sparkles size={12} /> Gợi ý Min tự động
+                      </button>
+                    </div>
                     <input 
                       type="number" 
+                      min="1"
                       className="form-input" 
                       style={{ borderRadius: '10px' }}
                       value={editForm.minStockLevel} 
@@ -338,12 +373,30 @@ const ProductDetails = () => {
         {/* Right Column: Analytics & Forecast */}
         {user?.role !== 'Staff' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            <EoqCard product={product} forecast={forecast} />
+            <EoqCard product={product} currentStock={stock} forecast={forecast} forecastMeta={forecastMeta} />
 
             <div className="glass-card" style={{ padding: '1.75rem', borderRadius: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                <TrendingUp size={20} color="var(--accent-primary)" />
-                <h3 className="text-subtitle" style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700 }}>Dự Báo Nhu Cầu Tồn Kho (AI Demand Forecast)</h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <TrendingUp size={20} color="var(--accent-primary)" />
+                  <h3 className="text-subtitle" style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700 }}>Biểu Đồ Dự Báo Nhu Cầu Tiêu Thụ</h3>
+                </div>
+                {forecastMeta?.status === 'INCUBATING' && (
+                  <span style={{ 
+                    fontSize: '0.8rem', 
+                    padding: '0.3rem 0.75rem', 
+                    borderRadius: '20px', 
+                    background: 'rgba(245, 158, 11, 0.15)', 
+                    color: '#f59e0b', 
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <Clock size={14} /> Đang tích lũy dữ liệu ({forecastMeta.daysAccumulated || 0}/30 ngày)
+                  </span>
+                )}
               </div>
 
               {forecast && forecast.length > 0 ? (
@@ -360,8 +413,41 @@ const ProductDetails = () => {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                  Chưa có đủ dữ liệu lịch sử giao dịch để chạy mô hình AI dự báo nhu cầu.
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '2.5rem 1.5rem', 
+                  background: 'var(--bg-primary)', 
+                  borderRadius: '12px',
+                  border: '1px dashed var(--border-color)'
+                }}>
+                  <div style={{ display: 'inline-flex', padding: '0.75rem', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', marginBottom: '1rem' }}>
+                    <Clock size={32} />
+                  </div>
+                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                    {forecastMeta?.status === 'INCUBATING' 
+                      ? 'Sản phẩm mới - Chưa kích hoạt dự báo AI'
+                      : 'Chưa có đủ dữ liệu lịch sử'}
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', maxWidth: '520px', marginInline: 'auto', lineHeight: 1.6 }}>
+                    {forecastMeta?.message || 'Sản phẩm cần ở trong kho và phát sinh dữ liệu lưu chuyển tối thiểu 30 ngày để kích hoạt mô hình AI dự báo nhu cầu chính xác cao.'}
+                  </p>
+                  {forecastMeta?.status === 'INCUBATING' && (
+                    <div style={{ marginTop: '1.25rem', maxWidth: '360px', marginInline: 'auto' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        <span>Tiến trình tích lũy:</span>
+                        <strong style={{ color: '#f59e0b' }}>{forecastMeta.daysAccumulated || 0} / 30 ngày</strong>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', background: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ 
+                          width: `${Math.min(100, Math.max(5, ((forecastMeta.daysAccumulated || 0) / 30) * 100))}%`, 
+                          height: '100%', 
+                          background: '#f59e0b', 
+                          borderRadius: '4px',
+                          transition: 'width 0.4s ease'
+                        }} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
@@ -34,6 +34,7 @@ const App = () => {
             {/* Sơ đồ & Danh mục Kệ kho */}
             <Route element={<ProtectedRoute requiredPermission="locations:read" allowedRoles={['Admin', 'Manager']} />}>
               <Route path="/warehouse-map" element={<WarehouseMap />} />
+              <Route path="/warehouse_map" element={<WarehouseMap />} />
               <Route path="/locations" element={<LocationManagement />} />
             </Route>
 
@@ -70,6 +71,9 @@ const App = () => {
               <Route path="/system-health" element={<SystemHealth />} />
             </Route>
           </Route>
+
+          {/* Catch-all fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
     </AuthProvider>

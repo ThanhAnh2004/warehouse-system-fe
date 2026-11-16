@@ -2,15 +2,39 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import apiClient from '../api/client';
 import { 
-  Map, Box, Search, RefreshCw, ArrowRightLeft, Sparkles, 
+  Map as MapIcon, Box, Search, RefreshCw, ArrowRightLeft, Sparkles, 
   Truck, Cpu, Compass, LayoutGrid, Laptop, Tv, Keyboard, Shield, Zap, Info, Layers, Table, PlusCircle, Package, X, AlertCircle
 } from 'lucide-react';
 
 const ZONE_CONFIG = {
-  'ZONE-HIGH-VAL': { labelVi: 'Hàng Giá Trị Cao', name: 'Khu Hàng Giá Trị Cao (Laptop, Smartphone)', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)', desc: 'Dãy A (A01 - A06): Khu Nhặt Hàng Nhanh - Smartphone, Laptop, Drone' },
-  'ZONE-LARGE-APPLIANCE': { labelVi: 'Điện Tử Cỡ Lớn', name: 'Khu Điện Tử Cỡ Lớn (Smart TV, Loa)', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)', desc: 'Dãy B (B01 - B08): Khu Luân Chuyển Vừa - Smart TV, Loa, Máy chiếu' },
-  'ZONE-ACCESSORIES': { labelVi: 'Linh Kiện & Phụ Kiện', name: 'Khu Linh Kiện & Phụ Kiện (High-Bay)', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)', desc: 'Dãy C (C01 - C04): Khu Lưu Trữ Mật Độ Cao - Bàn phím, Chuột, RAM/SSD' },
-  'ZONE-ESD-TEMP': { labelVi: 'Chống Tĩnh Điện ESD', name: 'Khu Chống Tĩnh Điện & Bán Dẫn (Phòng ESD)', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.12)', desc: 'Dãy D (D01 - D02): Phòng ESD kiểm soát độ ẩm 45% (Chipset, Board)' },
+  'ZONE-ACCESSORIES': { 
+    labelVi: 'Khu Mật Độ Cao', 
+    name: 'Khu Lưu Trữ Mật Độ Cao (Kệ C & Kệ D)', 
+    color: '#8b5cf6', 
+    bg: 'rgba(139, 92, 246, 0.12)', 
+    desc: 'Kệ C (4 Tầng Phụ Kiện, Linh Kiện) & Kệ D (3 Tầng Kỹ Thuật, Đổi Trả 30 Ngày & Bảo Hành)' 
+  },
+  'ZONE-LARGE-APPLIANCE': { 
+    labelVi: 'Khu Luân Chuyển Vừa', 
+    name: 'Khu Luân Chuyển Vừa (Điện Máy & Điện Lạnh Cỡ Lớn)', 
+    color: '#3b82f6', 
+    bg: 'rgba(59, 130, 246, 0.12)', 
+    desc: 'Kệ B1 (4 Tầng Smart TV & Loa) & Kệ B2 (4 Tầng Tủ Lạnh, Máy Giặt, Điều Hòa)' 
+  },
+  'ZONE-HIGH-VAL': { 
+    labelVi: 'Khu Nhặt Hàng Nhanh', 
+    name: 'Khu Nhặt Hàng Nhanh (Công Nghệ Giá Trị Cao)', 
+    color: '#10b981', 
+    bg: 'rgba(16, 185, 129, 0.12)', 
+    desc: 'Kệ A1 (3 Tầng Smartphone & Smartwatch) & Kệ A2 (3 Tầng MacBook, Laptop & iPad)' 
+  },
+};
+
+const getZoneMeta = (zoneKey) => {
+  if (zoneKey === 'ZONE-SERVICE-RMA' || zoneKey === 'ZONE-ESD-TEMP') {
+    return ZONE_CONFIG['ZONE-ACCESSORIES'];
+  }
+  return ZONE_CONFIG[zoneKey] || ZONE_CONFIG['ZONE-ACCESSORIES'];
 };
 
 const PRODUCT_PALETTE = [
@@ -73,6 +97,7 @@ const WarehouseMap = () => {
   const [unallocatedProducts, setUnallocatedProducts] = useState([]);
   const [showUnallocatedModal, setShowUnallocatedModal] = useState(false);
   const [unallocatedLoading, setUnallocatedLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     fetchLocations();
@@ -207,37 +232,36 @@ const WarehouseMap = () => {
     const normQ = normalizeText(query);
     const code = (loc.code || '').toUpperCase();
     const aisle = (loc.aisle || '').toUpperCase();
+    const rack = (loc.rack || '').toUpperCase();
     const desc = (loc.description || '').toLowerCase();
+    const shelfLevel = String(loc.shelfLevel || '');
 
     const normCode = normalizeText(code);
     const normAisle = normalizeText(aisle);
+    const normRack = normalizeText(rack);
     const normDesc = normalizeText(desc);
 
-    // 1. Direct code/aisle/desc includes
-    if (normCode.includes(normQ) || normAisle.includes(normQ) || normDesc.includes(normQ)) return true;
+    // 1. Direct code/aisle/rack/desc includes
+    if (normCode.includes(normQ) || normAisle.includes(normQ) || normRack.includes(normQ) || normDesc.includes(normQ)) return true;
 
-    // 2. Prefix matching ("Tầng A01", "Level A01", "Kệ A01", "Dãy A01")
-    const codeWithPrefix = `tang ${normCode} ke ${normCode} level ${normCode} day ${normCode}`;
-    if (codeWithPrefix.includes(normQ)) return true;
+    // 2. Prefix matching ("Tầng 1", "Tầng A1-L1", "Kệ A1", "Rack A1")
+    const searchAliases = `tang ${shelfLevel} level ${shelfLevel} ke ${normRack} ${normRack} ${normCode} tang ${normCode}`;
+    if (searchAliases.includes(normQ)) return true;
 
-    // 3. Reverse check (if search query contains the location code e.g. "xem tầng A01")
-    if (normQ.includes(normCode)) return true;
+    // 3. Reverse check
+    if (normQ.includes(normCode) || (normRack && normQ.includes(normRack))) return true;
 
-    // 4. Letter + Digit combination matching (e.g. "A 01", "a-01", "A 1", "tầng A1")
+    // 4. Letter + Digit combination matching (e.g. "A1", "B2", "C1")
     const digitMatch = normQ.match(/\d+/);
     const letterMatch = normQ.match(/[a-d]/i);
-
     if (letterMatch && digitMatch) {
       const searchLetter = letterMatch[0].toUpperCase();
       const searchDigits = digitMatch[0];
-      const formattedDigits = searchDigits.padStart(2, '0');
-      const targetCode1 = `${searchLetter}${searchDigits}`;
-      const targetCode2 = `${searchLetter}${formattedDigits}`;
-
-      if (code === targetCode1 || code === targetCode2) return true;
+      const targetPrefix = `${searchLetter}${searchDigits}`;
+      if (code.startsWith(targetPrefix) || normRack.includes(targetPrefix.toLowerCase())) return true;
     }
 
-    // 5. Match items inside this location
+    // 5. Match items inside this location (Multi-SKU)
     if (loc.items && Array.isArray(loc.items)) {
       const itemMatch = loc.items.some(item => {
         const pName = normalizeText(item.productName || item.name);
@@ -250,8 +274,10 @@ const WarehouseMap = () => {
     return false;
   };
 
-  const filteredLocations = locations.filter(loc => {
-    const matchesZone = selectedZone === 'ALL' || loc.zone === selectedZone;
+  const filteredLocations = (locations || []).filter(loc => {
+    if (!loc) return false;
+    const normZone = loc.zone === 'ZONE-ESD-TEMP' ? 'ZONE-SERVICE-RMA' : loc.zone;
+    const matchesZone = selectedZone === 'ALL' || loc.zone === selectedZone || normZone === selectedZone;
     const matchesSearch = matchLocationSearch(loc, searchTerm);
     return matchesZone && matchesSearch;
   });
@@ -262,14 +288,47 @@ const WarehouseMap = () => {
     return { label: 'CÒN TRỐNG', color: '#10b981', bg: 'rgba(16, 185, 129, 0.2)' };
   };
 
-  // Group locations for the architectural layout (Filled 20 Racks)
-  const compactRacks = filteredLocations.filter(l => l.code.startsWith('C'));
-  const esdRacks = filteredLocations.filter(l => l.code.startsWith('D'));
-  const medRotRacksLeft = filteredLocations.filter(l => l.code === 'B01' || l.code === 'B02' || l.code === 'B03' || l.code === 'B04');
-  const purePickingRacks = filteredLocations.filter(l => l.code.startsWith('A'));
-  const medRotRacksRight = filteredLocations.filter(l => l.code === 'B05' || l.code === 'B06' || l.code === 'B07' || l.code === 'B08');
+  // Group locations by Rack (Kệ Hàng)
+  const groupLocationsByRack = (locList) => {
+    const racksMap = new Map();
+    (locList || []).forEach(loc => {
+      if (!loc) return;
+      const rackName = loc.rack || `Kệ ${(loc.code || '').split('-')[0] || loc.aisle || 'A1'}`;
+      if (!racksMap.has(rackName)) {
+        racksMap.set(rackName, {
+          rackName,
+          aisle: loc.aisle || '',
+          zone: loc.zone || 'ZONE-ACCESSORIES',
+          levels: []
+        });
+      }
+      racksMap.get(rackName).levels.push(loc);
+    });
 
-  const [showSuggestions, setShowSuggestions] = useState(false);
+    // Sort levels in descending order: Tầng 3 (Top) -> Tầng 2 (Eye level) -> Tầng 1 (Floor level)
+    racksMap.forEach(r => {
+      r.levels.sort((a, b) => (b.shelfLevel || 1) - (a.shelfLevel || 1));
+      r.totalItems = r.levels.reduce((sum, l) => sum + (l.currentItemsCount || 0), 0);
+      r.totalCapacity = r.levels.reduce((sum, l) => sum + (l.maxCapacity || 0), 0);
+      r.occupancyRate = r.totalCapacity > 0 ? Math.round((r.totalItems / r.totalCapacity) * 100) : 0;
+    });
+
+    return Array.from(racksMap.values());
+  };
+
+  // Grouped Racks for the 4 blueprint columns
+  const zoneARacks = groupLocationsByRack((filteredLocations || []).filter(l => l && l.zone === 'ZONE-HIGH-VAL'));
+  zoneARacks.sort((a, b) => (a.rackName || '').localeCompare(b.rackName || ''));
+
+  const allZoneBRacks = groupLocationsByRack((filteredLocations || []).filter(l => l && l.zone === 'ZONE-LARGE-APPLIANCE'));
+  const zoneBRacksLeft = allZoneBRacks.filter(r => (r.rackName || '').includes('B1') || (r.levels || []).some(l => (l.code || '').startsWith('B01') || (l.code || '').startsWith('B02') || (l.code || '').startsWith('B03') || (l.code || '').startsWith('B04')));
+  const zoneBRacksRight = allZoneBRacks.filter(r => (r.rackName || '').includes('B2') || (r.levels || []).some(l => (l.code || '').startsWith('B05') || (l.code || '').startsWith('B06') || (l.code || '').startsWith('B07') || (l.code || '').startsWith('B08')));
+  const finalZoneBLeft = zoneBRacksLeft.length > 0 ? zoneBRacksLeft : allZoneBRacks.slice(0, Math.ceil(allZoneBRacks.length / 2));
+  const finalZoneBRight = zoneBRacksRight.length > 0 ? zoneBRacksRight : allZoneBRacks.slice(Math.ceil(allZoneBRacks.length / 2));
+
+  // Khu Mật Độ Cao: Gồm Kệ C (4 Tầng Phụ Kiện) và Kệ D (3 Tầng Kỹ Thuật / Đổi Trả)
+  const zoneCRacks = groupLocationsByRack((filteredLocations || []).filter(l => l && (l.zone === 'ZONE-ACCESSORIES' || l.zone === 'ZONE-SERVICE-RMA' || l.zone === 'ZONE-ESD-TEMP')));
+  zoneCRacks.sort((a, b) => (a.rackName || '').localeCompare(b.rackName || ''));
 
   const matchedProductSuggestions = (allProducts || []).filter(p => {
     if (!searchTerm.trim()) return false;
@@ -280,7 +339,7 @@ const WarehouseMap = () => {
   }).slice(0, 10).map(p => {
     const foundLocs = locations.filter(loc => loc.items?.some(it => it.productId === p.id && it.quantity > 0));
     const storedLocationsText = foundLocs.length > 0 
-      ? foundLocs.map(l => `Tầng ${l.code}`).join(', ')
+      ? foundLocs.map(l => `${l.rack || ('Kệ ' + l.aisle)} - Tầng ${l.shelfLevel || 1} (${l.code})`).join(', ')
       : 'Hàng chờ phân kệ';
     return { ...p, storedLocationsText, firstLocation: foundLocs[0] || null };
   });
@@ -299,16 +358,130 @@ const WarehouseMap = () => {
     setSelectedRack(loc);
   };
 
+  const renderRackBox = (rackObj, borderColor = 'rgba(139, 92, 246, 0.4)') => {
+    if (!rackObj) return null;
+    const overallBadge = getHeatmapBadge(rackObj.occupancyRate || 0);
+    return (
+      <div
+        key={rackObj.rackName}
+        style={{
+          background: 'rgba(30, 41, 59, 0.85)',
+          border: `1px solid ${borderColor}`,
+          borderRadius: '10px',
+          padding: '0.75rem',
+          marginBottom: '0.85rem',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.25)'
+        }}
+      >
+        {/* Rack Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.4rem' }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Layers size={14} style={{ color: '#60a5fa' }} />
+              {rackObj.rackName}
+            </div>
+            <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+              {rackObj.levels.length} tầng • {rackObj.totalItems}/{rackObj.totalCapacity} món
+            </div>
+          </div>
+          <span style={{ background: overallBadge.bg, color: overallBadge.color, padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>
+            {rackObj.occupancyRate}%
+          </span>
+        </div>
+
+        {/* Stacked Levels (Top to Bottom: L3 -> L2 -> L1) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+          {rackObj.levels.map(loc => {
+            const badge = getHeatmapBadge(loc.occupancyRate);
+            const isSelected = selectedRack?.code === loc.code;
+            const items = loc.items || [];
+            return (
+              <div
+                key={loc.id}
+                onClick={() => setSelectedRack(loc)}
+                style={{
+                  padding: '0.55rem 0.65rem',
+                  background: isSelected ? 'rgba(99, 102, 241, 0.25)' : '#0f172a',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  borderLeft: `4px solid ${badge.color}`,
+                  borderTop: isSelected ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.05)',
+                  borderRight: isSelected ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.05)',
+                  borderBottom: isSelected ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.05)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(51, 65, 85, 0.8)'}
+                onMouseLeave={e => e.currentTarget.style.background = isSelected ? 'rgba(99, 102, 241, 0.25)' : '#0f172a'}
+                title={`Click xem chi tiết Tầng ${loc.shelfLevel || 1} (${loc.code})`}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f1f5f9' }}>
+                      Tầng {loc.shelfLevel || 1}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '3px' }}>
+                      {loc.code}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: badge.color, fontWeight: 700 }}>
+                    {loc.currentItemsCount || 0}/{loc.maxCapacity} món ({loc.occupancyRate}%)
+                  </span>
+                </div>
+
+                {/* Occupancy progress bar */}
+                <div style={{ height: '4px', background: '#1e293b', borderRadius: '2px', overflow: 'hidden', marginBottom: '4px' }}>
+                  <div style={{ width: `${Math.min(100, loc.occupancyRate)}%`, height: '100%', background: badge.color }}></div>
+                </div>
+
+                {/* Multi-SKU preview badges */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                  {items.length > 0 ? (
+                    items.slice(0, 2).map((it, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          fontSize: '0.62rem',
+                          background: 'rgba(255,255,255,0.07)',
+                          color: '#cbd5e1',
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          maxWidth: '120px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {it.productName || it.name}: {it.quantity}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: '0.62rem', color: '#64748b', fontStyle: 'italic' }}>Tầng trống</span>
+                  )}
+                  {items.length > 2 && (
+                    <span style={{ fontSize: '0.62rem', color: '#93c5fd', fontWeight: 600 }}>
+                      +{items.length - 2} hàng
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="animate-slide-up" style={{ paddingBottom: '3rem' }}>
       {/* Header Title Bar */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Map size={28} color="var(--accent-primary)" />
+          <MapIcon size={28} color="var(--accent-primary)" />
           <div>
-            <h1 className="text-title" style={{ marginBottom: 0 }}>Sơ Đồ Kiến Trúc Mặt Bằng Kho Thực Tế (Tận Dụng Lối Đi)</h1>
+            <h1 className="text-title" style={{ marginBottom: 0 }}>Sơ Đồ Kiến Trúc Kho Hàng (Thế Giới Di Động & Điện Máy Xanh)</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
-              Mô hình không gian 20 kệ đầy đủ: Cửa Cảng Nhập/Xuất [A], Khu Tụ Hàng [B/E], Khu Mật Độ Cao [C], Khu Nhặt Hàng Nhanh [D], Khu Luân Chuyển Vừa.
+              Hệ thống phân cấp: 3 Phân Khu Chức Năng • 6 Kệ Hàng (Rack) • 21 Vị Trí Tầng Kệ (Level) đa mặt hàng (Multi-SKU).
             </p>
           </div>
         </div>
@@ -381,7 +554,7 @@ const WarehouseMap = () => {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Tìm mã kệ (A01, B01...) hoặc tên sản phẩm..."
+                placeholder="Tìm kệ (Kệ C, Kệ D, Kệ A1...), tầng (Tầng 1, C01, D01...) hoặc tên sản phẩm..."
                 value={searchTerm}
                 onChange={e => {
                   setSearchTerm(e.target.value);
@@ -474,7 +647,7 @@ const WarehouseMap = () => {
               onClick={() => setSelectedZone('ALL')}
               style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
             >
-              Tất cả khu vực ({locations.length} Kệ)
+              Tất cả khu vực ({locations.length} Tầng Kệ)
             </button>
 
             {Object.entries(ZONE_CONFIG).map(([zKey, zConfig]) => (
@@ -615,12 +788,13 @@ const WarehouseMap = () => {
 
           {putawayResult && (
             <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>
-              🎯 Vị trí tối ưu: <b>Kệ {putawayResult.suggestedLocation}</b> ({
+              🎯 Vị trí tối ưu: <b>{putawayResult.rack ? `${putawayResult.rack} - Tầng ${putawayResult.shelfLevel} (${putawayResult.suggestedLocation})` : `Vị trí ${putawayResult.suggestedLocation}`}</b> ({
                 putawayResult.reason
-                  ?.replace(/ZONE-ACCESSORIES/g, 'Khu Linh Kiện & Phụ Kiện')
-                  ?.replace(/ZONE-HIGH-VAL/g, 'Khu Hàng Giá Trị Cao')
-                  ?.replace(/ZONE-LARGE-APPLIANCE/g, 'Khu Điện Tử Cỡ Lớn')
-                  ?.replace(/ZONE-ESD-TEMP/g, 'Khu Chống Tĩnh Điện ESD')
+                  ?.replace(/ZONE-ACCESSORIES/g, 'Khu Mật Độ Cao')
+                  ?.replace(/ZONE-HIGH-VAL/g, 'Khu Nhặt Hàng Nhanh')
+                  ?.replace(/ZONE-LARGE-APPLIANCE/g, 'Khu Luân Chuyển Vừa')
+                  ?.replace(/ZONE-SERVICE-RMA/g, 'Khu Mật Độ Cao')
+                  ?.replace(/ZONE-ESD-TEMP/g, 'Khu Mật Độ Cao')
               })
             </div>
           )}
@@ -662,7 +836,7 @@ const WarehouseMap = () => {
             {/* BluePrint Header Bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#60a5fa', fontWeight: 700 }}>
-                <LayoutGrid size={18} /> SƠ ĐỒ MẶT BẰNG KHO: 4 KỆ CHÍNH (KỆ A, B, C, D) & 20 TẦNG PHÂN KHU (MULTI-SKU)
+                <LayoutGrid size={18} /> SƠ ĐỒ MẶT BẰNG KHO: 3 PHÂN KHU CHỨC NĂNG • 6 KỆ HÀNG • 21 TẦNG LƯU TRỮ ĐA HÀNG HÓA (MULTI-SKU)
               </div>
 
               {/* Legend Badges */}
@@ -674,206 +848,66 @@ const WarehouseMap = () => {
             </div>
 
             {/* 4 MAIN SPATIAL COLUMNS */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(190px, 1fr))', gap: '0.85rem', alignItems: 'start', width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(220px, 1fr))', gap: '1rem', alignItems: 'start', width: '100%', boxSizing: 'border-box' }}>
               
-              {/* COLUMN 1 (LEFT): KHU LƯU TRỮ MẬT ĐỘ CAO (C01 - C04) & PHÒNG ESD (D01 - D02) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                
-                {/* Block C: Compact High-Bay */}
-                <div style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.4)', borderRadius: '10px', padding: '0.85rem' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#c084fc', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(139, 92, 246, 0.3)', paddingBottom: '0.4rem' }}>
-                    [KỆ C] KHU MẬT ĐỘ CAO
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ C (4 Tầng Linh Kiện: C01 - C04)</div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                    {compactRacks.map(loc => {
-                      const badge = getHeatmapBadge(loc.occupancyRate);
-                      return (
-                        <div
-                          key={loc.id}
-                          onClick={() => setSelectedRack(loc)}
-                          style={{
-                            padding: '0.65rem 0.75rem',
-                            background: '#1e293b',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            borderLeft: `4px solid ${badge.color}`,
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                            <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
-                            <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
-                          </div>
-                          <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
-                            <div style={{ width: `${loc.occupancyRate}%`, height: '100%', background: badge.color }}></div>
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {loc.description || 'Tầng đa năng High-Bay'}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              {/* COLUMN 1: KHU MẬT ĐỘ CAO (KỆ C & KỆ D) */}
+              <div style={{ background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '10px', padding: '0.75rem' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#c084fc', marginBottom: '0.2rem', textAlign: 'center', borderBottom: '1px solid rgba(139, 92, 246, 0.25)', paddingBottom: '0.35rem' }}>
+                  KHU MẬT ĐỘ CAO (KỆ C & KỆ D)
                 </div>
-
-                {/* Block D: ESD & Temperature Sensitive Room */}
-                <div style={{ background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.4)', borderRadius: '10px', padding: '0.85rem' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#22d3ee', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(6, 182, 212, 0.3)', paddingBottom: '0.4rem' }}>
-                    [KỆ D] PHÒNG CHỐNG TĨNH ĐIỆN ESD
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ D (2 Tầng Phòng Sạch: D01 - D02)</div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                    {esdRacks.map(loc => {
-                      const badge = getHeatmapBadge(loc.occupancyRate);
-                      return (
-                        <div
-                          key={loc.id}
-                          onClick={() => setSelectedRack(loc)}
-                          style={{
-                            padding: '0.65rem 0.75rem',
-                            background: '#1e293b',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            borderLeft: `4px solid ${badge.color}`,
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                            <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
-                            <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
-                          </div>
-                          <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
-                            <div style={{ width: `${loc.occupancyRate}%`, height: '100%', background: badge.color }}></div>
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {loc.description || 'Tầng ESD kiểm soát độ ẩm'}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center', marginBottom: '0.65rem' }}>
+                  Kệ C (4 Tầng Phụ Kiện) & Kệ D (3 Tầng Kỹ Thuật, Đổi Trả)
                 </div>
-
+                {zoneCRacks.length > 0 ? (
+                  zoneCRacks.map(r => renderRackBox(r, 'rgba(139, 92, 246, 0.35)'))
+                ) : (
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', textAlign: 'center', padding: '1rem 0' }}>Không có kệ phù hợp bộ lọc</div>
+                )}
               </div>
 
-              {/* COLUMN 2: KHU LUÂN CHUYỂN VỪA (KỆ B TRÁI: B01 - B04) */}
-              <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.4)', borderRadius: '10px', padding: '0.85rem' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.3)', paddingBottom: '0.4rem' }}>
-                  KỆ B (Dãy Trái: B01 - B04)
+              {/* COLUMN 2: KHU LUÂN CHUYỂN VỪA - DÃY 1 (KỆ B1) */}
+              <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', padding: '0.75rem' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.2rem', textAlign: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.25)', paddingBottom: '0.35rem' }}>
+                  KHU LUÂN CHUYỂN VỪA - DÃY 1 (KỆ B1)
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ B (Tầng B01 ➔ B04 - Điện Tử Cỡ Lớn)</div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  {medRotRacksLeft.map(loc => {
-                    const badge = getHeatmapBadge(loc.occupancyRate);
-                    return (
-                      <div
-                        key={loc.id}
-                        onClick={() => setSelectedRack(loc)}
-                        style={{
-                          padding: '0.65rem 0.75rem',
-                          background: '#1e293b',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          borderLeft: `4px solid ${badge.color}`,
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
-                          <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
-                        </div>
-                        <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
-                          <div style={{ width: `${loc.occupancyRate}%`, height: '100%', background: badge.color }}></div>
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {loc.description || 'Pallet tầng - Smart TV & Loa'}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center', marginBottom: '0.65rem' }}>
+                  Kệ B1: 4 Tầng Smart TV & Dàn Âm Thanh
                 </div>
+                {finalZoneBLeft.length > 0 ? (
+                  finalZoneBLeft.map(r => renderRackBox(r, 'rgba(59, 130, 246, 0.35)'))
+                ) : (
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', textAlign: 'center', padding: '1rem 0' }}>Không có kệ phù hợp bộ lọc</div>
+                )}
               </div>
 
-              {/* COLUMN 3 (CENTER): KHU NHẶT HÀNG NHANH TRUNG TÂM (KỆ A: A01 - A06) */}
-              <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '2px solid rgba(16, 185, 129, 0.5)', borderRadius: '10px', padding: '0.85rem' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#34d399', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(16, 185, 129, 0.3)', paddingBottom: '0.4rem' }}>
-                  [KỆ A] KHU NHẶT HÀNG CHUYÊN BIỆT
+              {/* COLUMN 3: KHU NHẶT HÀNG NHANH (KỆ A1 & KỆ A2) */}
+              <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '2px solid rgba(16, 185, 129, 0.4)', borderRadius: '10px', padding: '0.75rem' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#34d399', marginBottom: '0.2rem', textAlign: 'center', borderBottom: '1px solid rgba(16, 185, 129, 0.25)', paddingBottom: '0.35rem' }}>
+                  KHU NHẶT HÀNG NHANH (KỆ A1 & KỆ A2)
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ A (6 Tầng Hàng Giá Trị Cao: A01 - A06)</div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  {purePickingRacks.map(loc => {
-                    const badge = getHeatmapBadge(loc.occupancyRate);
-                    return (
-                      <div
-                        key={loc.id}
-                        onClick={() => setSelectedRack(loc)}
-                        style={{
-                          padding: '0.65rem 0.75rem',
-                          background: '#1e293b',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          borderLeft: `4px solid ${badge.color}`,
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
-                          <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
-                        </div>
-                        <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
-                          <div style={{ width: `${loc.occupancyRate}%`, height: '100%', background: badge.color }}></div>
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {loc.description || 'Tủ kính an ninh cao'}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center', marginBottom: '0.65rem' }}>
+                  Kệ A1 (3 Tầng Smartphone) & Kệ A2 (3 Tầng Laptop & MacBook)
                 </div>
+                {zoneARacks.length > 0 ? (
+                  zoneARacks.map(r => renderRackBox(r, 'rgba(16, 185, 129, 0.45)'))
+                ) : (
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', textAlign: 'center', padding: '1rem 0' }}>Không có kệ phù hợp bộ lọc</div>
+                )}
               </div>
 
-              {/* COLUMN 4 (RIGHT): KHU LUÂN CHUYỂN VỪA (KỆ B PHẢI: B05 - B08) */}
-              <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.4)', borderRadius: '10px', padding: '0.85rem' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.25rem', textAlign: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.3)', paddingBottom: '0.4rem' }}>
-                  KỆ B (Dãy Phải: B05 - B08)
+              {/* COLUMN 4: KHU LUÂN CHUYỂN VỪA - DÃY 2 (KỆ B2) */}
+              <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', padding: '0.75rem' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.2rem', textAlign: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.25)', paddingBottom: '0.35rem' }}>
+                  KHU LUÂN CHUYỂN VỪA - DÃY 2 (KỆ B2)
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', marginBottom: '0.75rem' }}>Kệ B (Tầng B05 ➔ B08 - Điện Tử Cỡ Lớn)</div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  {medRotRacksRight.map(loc => {
-                    const badge = getHeatmapBadge(loc.occupancyRate);
-                    return (
-                      <div
-                        key={loc.id}
-                        onClick={() => setSelectedRack(loc)}
-                        style={{
-                          padding: '0.65rem 0.75rem',
-                          background: '#1e293b',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          borderLeft: `4px solid ${badge.color}`,
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>Tầng {loc.code}</strong>
-                          <span style={{ background: badge.bg, color: badge.color, padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>{loc.occupancyRate}%</span>
-                        </div>
-                        <div style={{ height: '6px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
-                          <div style={{ width: `${loc.occupancyRate}%`, height: '100%', background: badge.color }}></div>
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {loc.description || 'Kệ khung thép chịu tải màn hình'}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center', marginBottom: '0.65rem' }}>
+                  Kệ B2: 4 Tầng Tủ Lạnh, Máy Giặt & Điều Hòa
                 </div>
+                {finalZoneBRight.length > 0 ? (
+                  finalZoneBRight.map(r => renderRackBox(r, 'rgba(59, 130, 246, 0.35)'))
+                ) : (
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', textAlign: 'center', padding: '1rem 0' }}>Không có kệ phù hợp bộ lọc</div>
+                )}
               </div>
 
             </div>
@@ -885,48 +919,76 @@ const WarehouseMap = () => {
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: 'var(--bg-primary)', borderBottom: '2px solid var(--border-color)' }}>
-                <th style={{ padding: '1rem' }}>MÃ KỆ (RACK)</th>
-                <th style={{ padding: '1rem' }}>VỊ TRÍ TẦNG (LEVEL)</th>
-                <th style={{ padding: '1rem' }}>PHÂN KHU (ZONE)</th>
-                <th style={{ padding: '1rem' }}>SỨC CHỨA TẦNG</th>
-                <th style={{ padding: '1rem' }}>TẢI TRỌNG TỐI ĐA</th>
-                <th style={{ padding: '1rem' }}>TRẠNG THÁI KHÔNG GIAN TẦNG</th>
+                <th style={{ padding: '0.85rem' }}>MÃ VỊ TRÍ</th>
+                <th style={{ padding: '0.85rem' }}>KỆ HÀNG (RACK)</th>
+                <th style={{ padding: '0.85rem' }}>VỊ TRÍ TẦNG</th>
+                <th style={{ padding: '0.85rem' }}>PHÂN KHU (ZONE)</th>
+                <th style={{ padding: '0.85rem' }}>MẶT HÀNG LƯU TRỮ (MULTI-SKU)</th>
+                <th style={{ padding: '0.85rem' }}>SỐ LƯỢNG / SỨC CHỨA</th>
+                <th style={{ padding: '0.85rem' }}>TẢI TRỌNG</th>
+                <th style={{ padding: '0.85rem' }}>TRẠNG THÁI</th>
               </tr>
             </thead>
             <tbody>
               {filteredLocations.map(loc => {
-                const zMeta = ZONE_CONFIG[loc.zone] || ZONE_CONFIG['ZONE-ACCESSORIES'];
-                const remaining = loc.maxCapacity - loc.currentItemsCount;
+                const zMeta = getZoneMeta(loc.zone);
+                const remaining = loc.maxCapacity - (loc.currentItemsCount || 0);
                 const isFull = loc.occupancyRate >= 100;
                 const isHigh = loc.occupancyRate >= 80;
+                const items = loc.items || [];
 
                 return (
                   <tr key={loc.id} style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }} onClick={() => setSelectedRack(loc)}>
-                    <td style={{ padding: '1rem', fontWeight: 700, fontSize: '1.05rem', color: '#60a5fa' }}>
-                      Kệ {loc.aisle}
+                    <td style={{ padding: '0.85rem', fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.95rem' }}>
+                      {loc.code}
                     </td>
-                    <td style={{ padding: '1rem', fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-primary)' }}>
-                      Tầng {loc.code}
+                    <td style={{ padding: '0.85rem', fontWeight: 700, color: '#60a5fa', fontSize: '0.9rem' }}>
+                      {loc.rack || `Kệ ${loc.aisle}`}
                     </td>
-                    <td style={{ padding: '1rem' }}>
-                      <span className="badge" style={{ background: zMeta.bg, color: zMeta.color, fontWeight: 700, padding: '0.3rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem' }}>
+                    <td style={{ padding: '0.85rem', fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>
+                      Tầng {loc.shelfLevel || 1}
+                    </td>
+                    <td style={{ padding: '0.85rem' }}>
+                      <span className="badge" style={{ background: zMeta.bg, color: zMeta.color, fontWeight: 700, padding: '0.25rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem' }}>
                         {zMeta.labelVi}
                       </span>
                     </td>
-                    <td style={{ padding: '1rem', fontWeight: 700 }}>{loc.maxCapacity} sản phẩm</td>
-                    <td style={{ padding: '1rem' }}>{Number(loc.maxWeightKg).toFixed(2)} kg</td>
-                    <td style={{ padding: '1rem' }}>
+                    <td style={{ padding: '0.85rem', maxWidth: '300px' }}>
+                      {items.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8' }}>
+                            {items.length} mặt hàng cùng lưu:
+                          </span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                            {items.map((it, idx) => (
+                              <span key={idx} style={{ fontSize: '0.68rem', background: 'var(--bg-secondary)', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                                {it.productName || it.name}: <b>{it.quantity}</b>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', fontStyle: 'italic' }}>Chưa có sản phẩm (Tầng trống)</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.85rem', fontWeight: 700, fontSize: '0.9rem' }}>
+                      <span style={{ color: isFull ? '#ef4444' : isHigh ? '#f59e0b' : '#10b981' }}>
+                        {loc.currentItemsCount || 0}
+                      </span> / {loc.maxCapacity} món ({loc.occupancyRate}%)
+                    </td>
+                    <td style={{ padding: '0.85rem', fontSize: '0.85rem' }}>{Number(loc.maxWeightKg).toFixed(1)} kg</td>
+                    <td style={{ padding: '0.85rem' }}>
                       {isFull ? (
-                        <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                          🔴 ĐÃ ĐẦY TẦNG (100%)
+                        <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 700, padding: '0.3rem 0.6rem', borderRadius: '20px', fontSize: '0.72rem' }}>
+                          🔴 ĐẦY TẦNG (100%)
                         </span>
                       ) : isHigh ? (
-                        <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                          🟡 SẮP ĐẦY (Còn trống {remaining} ô - {loc.occupancyRate}%)
+                        <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontWeight: 700, padding: '0.3rem 0.6rem', borderRadius: '20px', fontSize: '0.72rem' }}>
+                          🟡 SẮP ĐẦY (Trống {remaining})
                         </span>
                       ) : (
-                        <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700, padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                          🟢 CÒN TRỐNG {remaining} Ô ({loc.occupancyRate}% đã dùng)
+                        <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700, padding: '0.3rem 0.6rem', borderRadius: '20px', fontSize: '0.72rem' }}>
+                          🟢 TRỐNG {remaining} Ô
                         </span>
                       )}
                     </td>
@@ -947,10 +1009,10 @@ const WarehouseMap = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
               <div>
                 <h2 style={{ fontSize: '1.35rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  Chi Tiết Tầng Kho: <code style={{ color: 'var(--accent-primary)', fontSize: '1.4rem' }}>Tầng {selectedRack.code}</code>
+                  Chi Tiết Vị Trí: <code style={{ color: 'var(--accent-primary)', fontSize: '1.4rem' }}>{selectedRack.rack || `Kệ ${selectedRack.aisle}`} - Tầng {selectedRack.shelfLevel || 1}</code>
                 </h2>
                 <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  Thuộc Kệ {selectedRack.aisle} | Phân khu: {ZONE_CONFIG[selectedRack.zone]?.name || selectedRack.zone}
+                  Mã vị trí: <b>{selectedRack.code}</b> | Phân khu: {getZoneMeta(selectedRack.zone)?.name || selectedRack.zone}
                 </span>
               </div>
               <button className="btn btn-outline" onClick={() => { setSelectedRack(null); setRelocateItem(null); setShowAddForm(false); }}>✕ Đóng</button>
@@ -1065,9 +1127,11 @@ const WarehouseMap = () => {
                   <div>
                     <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Chọn Tầng đích đến:</label>
                     <select className="form-input" value={targetLocation} onChange={e => setTargetLocation(e.target.value)}>
-                      <option value="">-- Chọn Tầng đến --</option>
+                      <option value="">-- Chọn Vị Trí / Tầng đến --</option>
                       {locations.filter(l => l.code !== selectedRack.code).map(l => (
-                        <option key={l.id} value={l.code}>Tầng {l.code} (Kệ {l.aisle} - Trống {l.maxCapacity - l.currentItemsCount} chỗ)</option>
+                        <option key={l.id} value={l.code}>
+                          {l.rack || `Kệ ${l.aisle}`} - Tầng {l.shelfLevel || 1} ({l.code}) [Trống {l.maxCapacity - (l.currentItemsCount || 0)} chỗ]
+                        </option>
                       ))}
                     </select>
                   </div>

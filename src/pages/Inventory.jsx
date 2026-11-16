@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-import { Plus, Search, Image as ImageIcon, Tag, Filter, X, Save, Eye } from 'lucide-react';
+import { Plus, Search, Image as ImageIcon, Tag, Filter, X, Save, Eye, Sparkles } from 'lucide-react';
+import { calculateSuggestedMinStock } from '../utils/minStockCalculator';
 import './Inventory.css';
 
 const CATEGORY_CONFIG = [
@@ -53,7 +54,17 @@ const Inventory = () => {
     image: null
   });
 
-  // Lock body scroll when modal is active
+  const [minRationale, setMinRationale] = useState('');
+
+  const handleApplySuggestedMin = () => {
+    const { suggestedMin, rationale } = calculateSuggestedMinStock({
+      category: newProduct.category,
+      price: newProduct.price,
+      initialQuantity: newProduct.quantity
+    });
+    setNewProduct(prev => ({ ...prev, minStockLevel: suggestedMin }));
+    setMinRationale(rationale);
+  };
   useEffect(() => {
     if (showModal) {
       document.body.style.overflow = 'hidden';
@@ -381,8 +392,35 @@ const Inventory = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Ngưỡng Báo Thiếu (Min)</label>
-                  <input type="number" className="form-input" value={newProduct.minStockLevel} onChange={e => setNewProduct({...newProduct, minStockLevel: e.target.value})} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Ngưỡng Báo Thiếu (Min)</label>
+                    <button
+                      type="button"
+                      onClick={handleApplySuggestedMin}
+                      style={{
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        border: '1px solid rgba(99, 102, 241, 0.3)',
+                        color: 'var(--accent-primary)',
+                        borderRadius: '6px',
+                        padding: '2px 8px',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title="Tự động tính toán Min dựa vào Ngành hàng, Giá bán và Số lượng nhập"
+                    >
+                      <Sparkles size={12} /> Gợi ý Min tự động
+                    </button>
+                  </div>
+                  <input type="number" min="1" className="form-input" value={newProduct.minStockLevel} onChange={e => { setNewProduct({...newProduct, minStockLevel: e.target.value}); setMinRationale(''); }} />
+                  {minRationale && (
+                    <span style={{ fontSize: '0.72rem', color: '#10b981', display: 'block', marginTop: '4px', lineHeight: 1.4 }}>
+                      ✓ {minRationale}
+                    </span>
+                  )}
                 </div>
               </div>
 
