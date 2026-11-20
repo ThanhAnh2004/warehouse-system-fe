@@ -7,7 +7,7 @@ const CATEGORY_META = {
   microservice: { label: 'Microservice', icon: Server },
   python: { label: 'Dịch Vụ AI Python', icon: Cpu },
   database: { label: 'Cơ Sở Dữ Liệu', icon: Database },
-  broker: { label: 'Message Broker', icon: Box },
+  broker: { label: 'Event Streaming & Broker', icon: Box },
 };
 
 const SystemHealth = () => {
@@ -126,39 +126,119 @@ const SystemHealth = () => {
           </div>
 
           {/* Microservices Grid */}
-          <h2 className="text-title" style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Danh Sách Các Dịch Vụ Hạ Tầng (Microservices)</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h2 className="text-title" style={{ fontSize: '1.25rem', margin: 0 }}>
+                Danh Sách Dịch Vụ Hạ Tầng & Microservices
+              </h2>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                Tự động kiểm tra sức khỏe Heartbeat & TCP Ping thời gian thực toàn bộ 11 Containers
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', background: 'rgba(147, 51, 234, 0.1)', color: '#9333ea', border: '1px solid rgba(147, 51, 234, 0.3)', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
+                ● Đã Tối Ưu Gộp Service
+              </span>
+              <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
+                ● 2 Service Mới (Cửa 01 & 02)
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
             {data.services.map((svc) => {
               const meta = CATEGORY_META[svc.category] || CATEGORY_META.microservice;
               const Icon = meta.icon;
               const isUp = svc.status === 'up';
+
+              let noteColor = { bg: 'rgba(99, 102, 241, 0.1)', text: 'var(--accent-primary)', border: 'rgba(99, 102, 241, 0.3)' };
+              if (svc.note?.includes('Đã gộp')) {
+                noteColor = { bg: 'rgba(147, 51, 234, 0.12)', text: '#9333ea', border: 'rgba(147, 51, 234, 0.35)' };
+              } else if (svc.note?.includes('Mới')) {
+                noteColor = { bg: 'rgba(16, 185, 129, 0.12)', text: '#059669', border: 'rgba(16, 185, 129, 0.35)' };
+              } else if (svc.note?.includes('Streaming') || svc.note?.includes('Broker')) {
+                noteColor = { bg: 'rgba(234, 88, 12, 0.12)', text: '#ea580c', border: 'rgba(234, 88, 12, 0.35)' };
+              }
+
               return (
-                <div key={svc.name} className="glass-card" style={{ padding: '1.25rem', borderLeft: `4px solid ${isUp ? 'var(--success)' : 'var(--danger)'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <div style={{ color: 'var(--accent-primary)' }}><Icon size={22} /></div>
-                      <div>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{svc.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{meta.label}</div>
+                <div
+                  key={svc.name}
+                  className="glass-card"
+                  style={{
+                    padding: '1.25rem',
+                    borderLeft: `4px solid ${isUp ? 'var(--success)' : 'var(--danger)'}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.05)',
+                  }}
+                >
+                  <div>
+                    {/* Card Top */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem' }}>
+                        <div style={{ color: 'var(--accent-primary)', background: 'var(--bg-primary, #f1f5f9)', padding: '7px', borderRadius: '10px', marginTop: 2 }}>
+                          <Icon size={20} />
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.98rem', lineHeight: 1.3 }}>
+                            {svc.name}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: 3, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.73rem', color: 'var(--text-secondary)' }}>
+                              {meta.label}
+                            </span>
+                            {svc.note && (
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                  background: noteColor.bg,
+                                  color: noteColor.text,
+                                  border: `1px solid ${noteColor.border}`,
+                                }}
+                              >
+                                {svc.note}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
+
+                      <span
+                        className="badge"
+                        style={{
+                          background: isUp ? 'var(--success-light)' : 'var(--danger-light)',
+                          color: isUp ? 'var(--success)' : 'var(--danger)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          flexShrink: 0,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isUp ? 'var(--success)' : 'var(--danger)' }}></span>
+                        {isUp ? 'ĐANG CHẠY' : 'BỊ SẬP'}
+                      </span>
                     </div>
-                    <span
-                      className="badge"
-                      style={{
-                        background: isUp ? 'var(--success-light)' : 'var(--danger-light)',
-                        color: isUp ? 'var(--success)' : 'var(--danger)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                      }}
-                    >
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isUp ? 'var(--success)' : 'var(--danger)' }}></span>
-                      {isUp ? 'ĐANG CHẠY' : 'BỊ ĐẮT'}
-                    </span>
+
+                    {/* Card Description */}
+                    {svc.description && (
+                      <p style={{ margin: '0.5rem 0 0.85rem 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                        {svc.description}
+                      </p>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    <span>{svc.host}:{svc.port}</span>
-                    <span>Độ trễ: {svc.latencyMs} ms</span>
+
+                  {/* Card Bottom Meta */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)', paddingTop: '0.65rem' }}>
+                    <span style={{ fontFamily: 'monospace' }}>{svc.host}:{svc.port}</span>
+                    <span>Độ trễ: <strong style={{ color: isUp ? 'var(--success)' : 'var(--danger)' }}>{svc.latencyMs} ms</strong></span>
                   </div>
                 </div>
               );

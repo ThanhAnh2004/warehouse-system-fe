@@ -115,7 +115,7 @@ const Inventory = () => {
     formData.append('name', newProduct.name);
     formData.append('sku', newProduct.sku);
     formData.append('price', newProduct.price);
-    formData.append('quantity', newProduct.quantity);
+    formData.append('quantity', 0); // Master data starts at 0, actual stock arrives via Procurement PO Cửa 01
     formData.append('category', newProduct.category);
     formData.append('unit', newProduct.unit);
     formData.append('description', newProduct.description);
@@ -147,24 +147,28 @@ const Inventory = () => {
     top: 0,
     right: 0,
     bottom: 0,
-    left: isMobile ? 0 : 'var(--sidebar-width, 280px)',
-    background: 'rgba(15, 23, 42, 0.65)',
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    background: 'rgba(15, 23, 42, 0.75)',
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 9999,
+    zIndex: 99999,
     padding: '1rem',
+    margin: 0,
+    boxSizing: 'border-box',
   };
 
   return (
     <div className="animate-slide-up">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <h2 className="text-title" style={{ marginBottom: 0 }}>Quản Lý Tồn Kho (Inventory)</h2>
+        <h2 className="text-title" style={{ marginBottom: 0 }}>Quản Lý Tồn Kho (Inventory Service)</h2>
         {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('products:create')) && (
           <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={18} /> Thêm Sản Phẩm Mới
+            <Plus size={18} /> Khai Báo Mã Sản Phẩm Mới
           </button>
         )}
       </div>
@@ -321,123 +325,166 @@ const Inventory = () => {
           }}
         >
           <div
-            className="glass-card animate-scale-in"
+            className="modal-content animate-scale-in"
             style={{
-              maxWidth: '650px',
-              width: '92%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              padding: '1.75rem',
-              borderRadius: '16px',
-              background: 'var(--bg-card, #ffffff)',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
-              border: '1px solid var(--border-color)'
+              maxWidth: '680px',
+              width: '95%',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg-secondary, #ffffff)',
+              borderRadius: '20px',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.5)',
+              border: '1px solid var(--border-color)',
+              overflow: 'hidden',
+              margin: 'auto',
             }}
           >
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Plus size={22} color="var(--accent-primary)" />
-                <h3 className="text-subtitle" style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)', fontSize: '1.15rem' }}>
-                  Thêm Sản Phẩm Mới Chi Nhánh Điện Máy
-                </h3>
+            {/* Header (Fixed) */}
+            <div style={{ flexShrink: 0, padding: '1.25rem 1.75rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary, #ffffff)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)' }}>
+                  <Plus size={22} />
+                </div>
+                <div>
+                  <h3 style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)', fontSize: '1.18rem' }}>
+                    Khai Báo Mã Sản Phẩm Mới (Master Data)
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Định nghĩa mã thiết bị vào danh mục. Tồn kho ban đầu = 0 (Nhập kho qua Đơn Mua Hàng Cửa 01)
+                  </p>
+                </div>
               </div>
               <button
+                type="button"
                 className="btn"
-                style={{ background: 'transparent', border: 'none', padding: '4px', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                style={{ background: 'var(--bg-primary, #f1f5f9)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}
                 onClick={() => setShowModal(false)}
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleAddProduct} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Loại / Danh Mục Sản Phẩm</label>
-                <select className="form-input" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
-                  {CATEGORY_CONFIG.filter(c => c.key !== 'ALL').map(c => (
-                    <option key={c.key} value={c.key}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Tên Sản Phẩm</label>
-                <input required type="text" className="form-input" placeholder="Ví dụ: iPhone 15 Pro Max 256GB" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
-              </div>
-
-              <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mã SKU</label>
-                <input required type="text" className="form-input" placeholder="Ví dụ: APP-IP15PM-256" value={newProduct.sku} onChange={e => setNewProduct({...newProduct, sku: e.target.value})} />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <form onSubmit={handleAddProduct} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', margin: 0 }}>
+              {/* Scrollable Body */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Đơn Giá (VNĐ)</label>
-                  <input required type="number" className="form-input" placeholder="Ví dụ: 34990000" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
-                </div>
-                <div>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Số Lượng Tồn Kho</label>
-                  <input required type="number" className="form-input" placeholder="Ví dụ: 50" value={newProduct.quantity} onChange={e => setNewProduct({...newProduct, quantity: e.target.value})} />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Đơn Vị Tính</label>
-                  <select className="form-input" value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})}>
-                    <option value="Bộ">Bộ</option>
-                    <option value="Cái">Cái</option>
-                    <option value="Hộp">Hộp</option>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
+                    Loại / Danh Mục Sản Phẩm <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <select className="form-input" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
+                    {CATEGORY_CONFIG.filter(c => c.key !== 'ALL').map(c => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
                   </select>
                 </div>
+
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Ngưỡng Báo Thiếu (Min)</label>
-                    <button
-                      type="button"
-                      onClick={handleApplySuggestedMin}
-                      style={{
-                        background: 'rgba(99, 102, 241, 0.1)',
-                        border: '1px solid rgba(99, 102, 241, 0.3)',
-                        color: 'var(--accent-primary)',
-                        borderRadius: '6px',
-                        padding: '2px 8px',
-                        fontSize: '0.74rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                      title="Tự động tính toán Min dựa vào Ngành hàng, Giá bán và Số lượng nhập"
-                    >
-                      <Sparkles size={12} /> Gợi ý Min tự động
-                    </button>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
+                    Tên Sản Phẩm Thiết Bị <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input required type="text" className="form-input" placeholder="Ví dụ: iPhone 15 Pro Max 256GB" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                </div>
+
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
+                    Mã SKU Quản Lý <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input required type="text" className="form-input" placeholder="Ví dụ: APP-IP15PM-256" value={newProduct.sku} onChange={e => setNewProduct({...newProduct, sku: e.target.value.toUpperCase()})} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
+                      Đơn Giá Niêm Yết (VNĐ) <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input required type="number" min="0" className="form-input" placeholder="Ví dụ: 34990000" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
                   </div>
-                  <input type="number" min="1" className="form-input" value={newProduct.minStockLevel} onChange={e => { setNewProduct({...newProduct, minStockLevel: e.target.value}); setMinRationale(''); }} />
-                  {minRationale && (
-                    <span style={{ fontSize: '0.72rem', color: '#10b981', display: 'block', marginTop: '4px', lineHeight: 1.4 }}>
-                      ✓ {minRationale}
-                    </span>
-                  )}
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                      <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                        Số Lượng Tồn Ban Đầu
+                      </label>
+                      <span style={{ fontSize: '0.72rem', background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                        🔒 Tồn = 0
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      disabled
+                      className="form-input"
+                      value={0}
+                      style={{ background: 'var(--bg-primary, #f1f5f9)', cursor: 'not-allowed', color: 'var(--text-secondary)', fontWeight: 700 }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(99, 102, 241, 0.06)', padding: '0.75rem 1rem', borderRadius: 10, border: '1px solid rgba(99, 102, 241, 0.2)', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  ℹ️ <strong>Lưu ý nghiệp vụ:</strong> Sản phẩm mới khai báo có số lượng tồn kho ban đầu là <strong>0</strong>. Tồn kho sẽ được ghi nhận và sinh biên bản kiểm toán tự động khi tiếp nhận hàng từ <strong>Đơn Mua Hàng (Procurement Service - CỬA 01)</strong>.
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Đơn Vị Tính</label>
+                    <select className="form-input" value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})}>
+                      <option value="Bộ">Bộ</option>
+                      <option value="Cái">Cái</option>
+                      <option value="Chiếc">Chiếc</option>
+                      <option value="Hộp">Hộp</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Ngưỡng Báo Thiếu (Min)</label>
+                      <button
+                        type="button"
+                        onClick={handleApplySuggestedMin}
+                        style={{
+                          background: 'rgba(99, 102, 241, 0.1)',
+                          border: '1px solid rgba(99, 102, 241, 0.3)',
+                          color: 'var(--accent-primary)',
+                          borderRadius: '6px',
+                          padding: '2px 8px',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Tự động tính toán Min dựa vào Ngành hàng, Giá bán và Số lượng nhập"
+                      >
+                        <Sparkles size={12} /> Gợi ý Min tự động
+                      </button>
+                    </div>
+                    <input type="number" min="1" className="form-input" value={newProduct.minStockLevel} onChange={e => { setNewProduct({...newProduct, minStockLevel: e.target.value}); setMinRationale(''); }} />
+                    {minRationale && (
+                      <span style={{ fontSize: '0.72rem', color: '#10b981', display: 'block', marginTop: '4px', lineHeight: 1.4 }}>
+                        ✓ {minRationale}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mô Tả Sản Phẩm</label>
+                  <textarea className="form-input" rows="3" style={{ resize: 'none', fontFamily: 'inherit' }} placeholder="Mô tả thông số kỹ thuật..." value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
+                </div>
+
+                <div>
+                  <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Hình Ảnh Sản Phẩm</label>
+                  <input type="file" accept="image/*" className="form-input" onChange={handleFileChange} />
                 </div>
               </div>
 
-              <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mô Tả Sản Phẩm</label>
-                <textarea className="form-input" rows="3" style={{ resize: 'none', fontFamily: 'inherit' }} placeholder="Mô tả thông số kỹ thuật..." value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
-              </div>
-
-              <div>
-                <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Hình Ảnh Sản Phẩm</label>
-                <input type="file" accept="image/*" className="form-input" onChange={handleFileChange} />
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                <button type="button" className="btn btn-outline" style={{ minWidth: '90px' }} onClick={() => setShowModal(false)}>Hủy Bỏ</button>
-                <button type="submit" className="btn btn-primary" disabled={submitting} style={{ minWidth: '130px', gap: '6px' }}>
-                  <Save size={16} /> {submitting ? 'Đang lưu...' : 'Lưu Sản Phẩm'}
+              {/* Fixed Footer */}
+              <div style={{ flexShrink: 0, display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', alignItems: 'center', padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-secondary, #ffffff)' }}>
+                <button type="button" className="btn btn-outline" style={{ minWidth: '90px' }} onClick={() => setShowModal(false)}>
+                  Hủy Bỏ
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={submitting} style={{ minWidth: '150px', gap: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Save size={16} /> {submitting ? 'Đang lưu...' : 'Lưu Mã Hàng Mới'}
                 </button>
               </div>
             </form>
@@ -445,7 +492,7 @@ const Inventory = () => {
         </div>,
         document.body
       )}
-    </div>
+</div>
   );
 };
 

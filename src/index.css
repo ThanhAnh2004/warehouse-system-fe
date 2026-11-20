@@ -226,30 +226,33 @@ button {
   border: 1px solid var(--border-color);
 }
 
-.data-table {
+.data-table,
+.table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.data-table th {
+.data-table th,
+.table th {
   text-align: left;
-  padding: 1.1rem 1.5rem;
+  padding: 0.9rem 1.1rem;
   color: var(--text-primary);
   font-weight: 700;
   font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   background: var(--bg-secondary);
   border-bottom: 2px solid var(--border-color);
   border-right: 1px solid var(--border-color);
 }
 
-.data-table th:last-child {
+.data-table th:last-child,
+.table th:last-child {
   border-right: none;
 }
 
-.data-table td {
-  padding: 1.2rem 1.5rem;
+.data-table td,
+.table td {
+  padding: 0.85rem 1.1rem;
   background: var(--bg-glass);
   color: var(--text-primary);
   font-weight: 500;
@@ -258,15 +261,18 @@ button {
   border-right: 1px solid var(--border-color);
 }
 
-.data-table td:last-child {
+.data-table td:last-child,
+.table td:last-child {
   border-right: none;
 }
 
-.data-table tr:last-child td {
+.data-table tr:last-child td,
+.table tr:last-child td {
   border-bottom: none;
 }
 
-.data-table tr:hover td {
+.data-table tr:hover td,
+.table tr:hover td {
   background: var(--bg-glass-hover);
 }
 
@@ -350,15 +356,16 @@ button {
   animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-/* Modal - dùng chung cho mọi trang (Inventory, Transactions, Users...) nên phải nằm ở
-   CSS toàn cục thay vì 1 file CSS riêng của từng trang. */
+/* Modal - dùng chung cho mọi trang (Inventory, Transactions, Users, Orders, Procurement) */
 .modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(11, 20, 55, 0.65);
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -375,7 +382,62 @@ button {
   margin: auto;
   position: relative;
   z-index: 10000;
-  background: var(--bg-glass);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
-  border-radius: var(--radius-lg);
+  background: var(--bg-secondary, #ffffff) !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.4);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+}
+
+/* Global Form and Input Styles */
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.4rem;
+}
+
+.form-label .req {
+  color: var(--danger, #dc2626);
+  font-weight: 700;
+}
+
+.input, .form-input, select.input, textarea.input {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-color, #cbd5e1);
+  background: var(--bg-secondary, #ffffff);
+  color: var(--text-primary, #0f172a);
+  font-size: 0.9rem;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.input:focus, .form-input:focus, select.input:focus, textarea.input:focus {
+  border-color: var(--accent-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  background: var(--bg-secondary, #ffffff);
+}
+
+[data-theme='dark'] .modal-content {
+  background: #111c44 !important;
+}
+
+[data-theme='dark'] .input,
+[data-theme='dark'] .form-input,
+[data-theme='dark'] select.input,
+[data-theme='dark'] textarea.input {
+  background: #0b1437;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.15);
 }

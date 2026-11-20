@@ -2,7 +2,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary';
 import { AuthContext } from '../context/AuthContext';
-import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell, Trash2, Sun, Moon, Shield, Activity, ClipboardList, Map as MapIcon, Layers } from 'lucide-react';
+import { LayoutDashboard, Package, ArrowLeftRight, LogOut, Users, FileText, Bell, Trash2, Sun, Moon, Shield, Activity, ClipboardList, Map as MapIcon, Layers, ShoppingCart, Building2 } from 'lucide-react';
 import apiClient from '../api/client';
 import './Layout.css';
 
@@ -125,6 +125,14 @@ const Layout = () => {
               <span>Kiểm kê & Điều chỉnh</span>
             </NavLink>
           )}
+          <NavLink to="/orders" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <ShoppingCart size={20} />
+            <span>Quản lý Đơn hàng</span>
+          </NavLink>
+          <NavLink to="/procurement" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Building2 size={20} />
+            <span>Nhà cung cấp</span>
+          </NavLink>
 
           {/* Nhóm 3: Sơ Đồ & Vị Trí Kệ Kho */}
           {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('locations:read') || hasPermission('locations:allocate')) && (

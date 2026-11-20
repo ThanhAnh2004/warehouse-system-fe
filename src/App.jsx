@@ -17,6 +17,8 @@ import Profile from './pages/Profile';
 import RoleManagement from './pages/RoleManagement';
 import WarehouseMap from './pages/WarehouseMap';
 import LocationManagement from './pages/LocationManagement';
+import Orders from './pages/Orders';
+import Procurement from './pages/Procurement';
 
 const App = () => {
   return (
@@ -55,6 +57,8 @@ const App = () => {
               <Route path="/products/:sku" element={<ProductDetails />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/adjustments" element={<StockAdjustment />} />
+              <Route path="/orders" element={<Orders />} />
+              <Route path="/procurement" element={<Procurement />} />
               <Route path="/profile" element={<Profile />} />
             </Route>
 
