@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import apiClient from '../api/client';
-import { ClipboardList, AlertTriangle, Send, PackageMinus, PackagePlus, Edit2, Trash2, X, Save } from 'lucide-react';
+import { ClipboardList, AlertTriangle, Send, PackageMinus, PackagePlus, Edit2, Trash2, X, Save, Calendar } from 'lucide-react';
 
 const ADJUSTMENT_TYPES = [
   { key: 'DAMAGED', label: 'Hàng hư hỏng / Bổ vỡ', direction: 'OUTBOUND' },
@@ -12,6 +12,13 @@ const ADJUSTMENT_TYPES = [
   { key: 'COUNT_REMOVE', label: 'Điều chỉnh kiểm kê (-)', direction: 'OUTBOUND' },
 ];
 
+const DATE_PRESETS = [
+  { key: 'ALL', label: 'Tất cả' },
+  { key: 'TODAY', label: 'Hôm nay' },
+  { key: '7DAYS', label: '7 ngày' },
+  { key: '30DAYS', label: '30 ngày' },
+];
+
 const StockAdjustment = () => {
   const [products, setProducts] = useState([]);
   const [productMap, setProductMap] = useState({});
@@ -20,6 +27,7 @@ const StockAdjustment = () => {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [productSearch, setProductSearch] = useState('');
+  const [datePreset, setDatePreset] = useState('ALL');
 
   const [form, setForm] = useState({ productId: '', typeKey: 'DAMAGED', quantity: 1, reason: '' });
 
@@ -55,12 +63,43 @@ const StockAdjustment = () => {
     }
   };
 
-  const fetchRecent = async () => {
+  const getPresetDates = (preset) => {
+    const now = new Date();
+    if (preset === 'TODAY') {
+      const todayStr = now.toISOString().split('T')[0];
+      return { startDate: todayStr, endDate: todayStr };
+    }
+    if (preset === '7DAYS') {
+      const past = new Date(now.getTime() - 7 * 86400000);
+      return {
+        startDate: past.toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+      };
+    }
+    if (preset === '30DAYS') {
+      const past = new Date(now.getTime() - 30 * 86400000);
+      return {
+        startDate: past.toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+      };
+    }
+    return { startDate: '', endDate: '' };
+  };
+
+  const fetchRecent = async (preset = datePreset) => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/transactions', {
-        params: { type: 'ADJUSTMENT', limit: 100, sortBy: 'createdAt', sortOrder: 'DESC' }
-      });
+      const { startDate, endDate } = getPresetDates(preset);
+      const params = {
+        type: 'ADJUSTMENT',
+        limit: 100,
+        sortBy: 'createdAt',
+        sortOrder: 'DESC',
+      };
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+
+      const res = await apiClient.get('/transactions', { params });
       setRecent(res.data?.data || []);
     } catch (err) {
       console.error('Failed to fetch recent adjustments:', err);
@@ -69,9 +108,14 @@ const StockAdjustment = () => {
     }
   };
 
+  const handleDatePresetChange = (preset) => {
+    setDatePreset(preset);
+    fetchRecent(preset);
+  };
+
   useEffect(() => {
     fetchProducts();
-    fetchRecent();
+    fetchRecent('ALL');
   }, []);
 
   const filteredProducts = products.filter((p) =>
@@ -105,7 +149,7 @@ const StockAdjustment = () => {
       await apiClient.post('/transactions', payload);
       setMessage({ type: 'success', text: `Đã ghi nhận điều chỉnh kiểm kê: ${adjType.label} (${isIncrease ? '+' : '-'}${qty}).` });
       setForm((f) => ({ ...f, quantity: 1, reason: '' }));
-      fetchRecent();
+      fetchRecent(datePreset);
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Ghi nhận điều chỉnh thất bại.' });
     } finally {
@@ -136,7 +180,7 @@ const StockAdjustment = () => {
       });
       setMessage({ type: 'success', text: 'Đã cập nhật báo cáo điều chỉnh thành công.' });
       setEditingTx(null);
-      fetchRecent();
+      fetchRecent(datePreset);
     } catch (err) {
       alert('Lỗi cập nhật: ' + (err.response?.data?.message || err.message));
     } finally {
@@ -151,7 +195,7 @@ const StockAdjustment = () => {
       await apiClient.delete(`/transactions/${deletingTx.id}`);
       setMessage({ type: 'success', text: 'Đã xóa báo cáo điều chỉnh thành công.' });
       setDeletingTx(null);
-      fetchRecent();
+      fetchRecent(datePreset);
     } catch (err) {
       alert('Lỗi xóa báo cáo: ' + (err.response?.data?.message || err.message));
     } finally {
@@ -260,7 +304,75 @@ const StockAdjustment = () => {
 
         {/* Recent adjustments */}
         <div className="glass-card">
-          <h3 className="text-subtitle" style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>Lịch sử điều chỉnh gần đây</h3>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              marginBottom: '1.25rem',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid var(--border-color, rgba(226, 232, 240, 0.8))',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <h3 className="text-subtitle" style={{ fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                Lịch sử điều chỉnh gần đây
+              </h3>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  background: 'var(--bg-secondary, rgba(0, 0, 0, 0.04))',
+                  color: 'var(--text-secondary, #64748b)',
+                  fontWeight: 600,
+                }}
+              >
+                {recent.length} bản ghi
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                background: 'var(--bg-secondary, rgba(0, 0, 0, 0.03))',
+                padding: '3px 4px',
+                borderRadius: '10px',
+                border: '1px solid var(--border-color, #e2e8f0)',
+              }}
+            >
+              <Calendar size={14} style={{ color: 'var(--text-secondary)', marginLeft: '6px', marginRight: '2px' }} />
+              {DATE_PRESETS.map((p) => {
+                const isActive = datePreset === p.key;
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => handleDatePresetChange(p.key)}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.8rem',
+                      fontWeight: isActive ? 600 : 500,
+                      borderRadius: '7px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: isActive ? 'var(--accent-primary, #3b82f6)' : 'transparent',
+                      color: isActive ? '#ffffff' : 'var(--text-secondary, #64748b)',
+                      boxShadow: isActive ? '0 1px 3px rgba(59, 130, 246, 0.3)' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="table-container" style={{ overflowX: 'auto' }}>
             <table className="data-table" style={{ width: '100%' }}>
               <thead>
@@ -278,7 +390,22 @@ const StockAdjustment = () => {
                 {loading ? (
                   <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Đang tải...</td></tr>
                 ) : recent.length === 0 ? (
-                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>Chưa có báo cáo điều chỉnh nào.</td></tr>
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-secondary)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                        <ClipboardList size={30} style={{ opacity: 0.35 }} />
+                        <span>
+                          {datePreset === 'TODAY'
+                            ? 'Không có báo cáo điều chỉnh nào trong hôm nay.'
+                            : datePreset === '7DAYS'
+                            ? 'Không có báo cáo điều chỉnh nào trong 7 ngày qua.'
+                            : datePreset === '30DAYS'
+                            ? 'Không có báo cáo điều chỉnh nào trong 30 ngày qua.'
+                            : 'Chưa có báo cáo điều chỉnh nào.'}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
                 ) : recent.map((t, idx) => {
                   const isPositive = t.quantity > 0;
                   const reason = t.note || 'Điều chỉnh kiểm kê';
