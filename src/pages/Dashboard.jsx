@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
+import { AuthContext } from '../context/AuthContext';
+import { useDialog } from '../context/DialogContext';
+import CreatePurchaseOrderModal from '../components/CreatePurchaseOrderModal';
 import {
   Package,
   AlertTriangle,
@@ -46,6 +49,8 @@ ChartJS.register(
 const fmtVND = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(n || 0);
 
 const Dashboard = () => {
+  const { hasPermission } = useContext(AuthContext);
+  const { showAlert, showConfirm } = useDialog();
   const [reportData, setReportData] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [forecastTrends, setForecastTrends] = useState(null);
@@ -55,18 +60,12 @@ const Dashboard = () => {
   const [forecastLoading, setForecastLoading] = useState(true);
   const [forecastDays, setForecastDays] = useState(7);
 
-  // Low stock & transaction modals state
+  // Low stock & replenishment PO modal state
   const [showLowStockModal, setShowLowStockModal] = useState(false);
-  const [showCreateTxModal, setShowCreateTxModal] = useState(false);
-  const [productsList, setProductsList] = useState([]);
-  const [productSearch, setProductSearch] = useState('');
-  const [submittingTx, setSubmittingTx] = useState(false);
-  const [newTxForm, setNewTxForm] = useState({
-    productId: '',
-    type: 'INBOUND',
-    quantity: 1,
-    note: ''
-  });
+  const [showCreatePOModal, setShowCreatePOModal] = useState(false);
+  const [inboundProduct, setInboundProduct] = useState(null);
+  const [inboundNeedQty, setInboundNeedQty] = useState(10);
+  const [inboundNotes, setInboundNotes] = useState('');
 
   useEffect(() => {
     fetchReport();
@@ -77,6 +76,18 @@ const Dashboard = () => {
   useEffect(() => {
     fetchForecastTrends();
   }, [forecastDays]);
+
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    if (showLowStockModal || showCreatePOModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [showLowStockModal, showCreatePOModal]);
 
   const fetchReport = async () => {
     try {
@@ -121,63 +132,15 @@ const Dashboard = () => {
     }
   };
 
-  const fetchProductsList = async () => {
-    try {
-      const res = await apiClient.get('/inventory/products?limit=1000');
-      setProductsList(res.data?.data || []);
-    } catch (err) {
-      console.error('Failed to fetch products list:', err);
-    }
-  };
-
   const handleOpenInboundModal = (p) => {
-    if (productsList.length === 0) fetchProductsList();
     const minVal = p.minStockLevel ?? 10;
     const curQty = p.quantity || 0;
     const needVal = Math.max(1, minVal - curQty);
 
-    setProductSearch('');
-    setNewTxForm({
-      productId: p.id,
-      type: 'INBOUND',
-      quantity: needVal,
-      note: `Nhập bổ sung tồn kho an toàn cho sản phẩm ${p.name} (SKU: ${p.sku})`
-    });
-    setShowCreateTxModal(true);
-  };
-
-  const handleCreateTxSubmit = async (e) => {
-    e.preventDefault();
-    if (!newTxForm.productId) {
-      alert('Vui lòng chọn sản phẩm!');
-      return;
-    }
-    if (!newTxForm.quantity || Number(newTxForm.quantity) <= 0) {
-      alert('Số lượng nhập phải lớn hơn 0!');
-      return;
-    }
-
-    try {
-      setSubmittingTx(true);
-      const payload = {
-        productId: newTxForm.productId,
-        type: newTxForm.type,
-        quantity: Number(newTxForm.quantity),
-        note: newTxForm.note,
-        locationTo: 'DEFAULT_WAREHOUSE',
-      };
-
-      await apiClient.post('/transactions', payload);
-      alert('🎉 Tạo giao dịch nhập kho thành công!');
-      setShowCreateTxModal(false);
-
-      fetchReport();
-      fetchAnalytics();
-    } catch (err) {
-      alert('Lỗi tạo giao dịch: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setSubmittingTx(false);
-    }
+    setInboundProduct(p);
+    setInboundNeedQty(needVal);
+    setInboundNotes(`Nhập bổ sung tồn kho an toàn cho sản phẩm ${p.name} (SKU: ${p.sku})`);
+    setShowCreatePOModal(true);
   };
 
   // Zone capacity metric helper theo 3 phân khu chức năng chuẩn của kho
@@ -396,12 +359,34 @@ const Dashboard = () => {
 
       {/* OVERVIEW RACK OCCUPANCY SUMMARY */}
       <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid var(--accent-primary)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.25rem' }}>
-          <Layers size={24} color="var(--accent-primary)" />
-          <div>
-            <h3 className="text-title" style={{ fontSize: '1.15rem', margin: 0 }}>Tổng Quan Tỷ Lệ Lấp Đầy Kho (Rack Capacity Overview)</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Phân bố dung lượng không gian lưu trữ hiện tại theo đúng 3 phân khu kệ kho chức năng</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <Layers size={24} color="var(--accent-primary)" />
+            <div>
+              <h3 className="text-title" style={{ fontSize: '1.15rem', margin: 0 }}>Tổng Quan Tỷ Lệ Lấp Đầy Kho (Rack Capacity Overview)</h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Phân bố dung lượng không gian lưu trữ hiện tại theo đúng 3 phân khu kệ kho chức năng</p>
+            </div>
           </div>
+          {reportData && (() => {
+            const onRackTotal = zoneHighVal.used + zoneLargeAppliance.used + zoneAccessories.used;
+            const unallocatedTotal = Math.max(0, (reportData.totalStockQuantity || 0) - onRackTotal);
+            if (unallocatedTotal <= 0) return null;
+            return (
+              <span
+                className="badge"
+                style={{
+                  background: 'rgba(245, 158, 11, 0.14)',
+                  color: '#d97706',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                }}
+              >
+                Chờ xếp kệ: {unallocatedTotal.toLocaleString('vi-VN')} món
+              </span>
+            );
+          })()}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
@@ -411,7 +396,7 @@ const Dashboard = () => {
               <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#10b981' }}>KHU NHẶT HÀNG NHANH (KỆ A1 & A2)</span>
               <span className="badge" style={{ background: '#10b981', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneHighVal.rate}% sử dụng</span>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>6 Tầng A01 ➔ A06 (Laptop & Smartphones)</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>{zoneHighVal.count} Tầng A01 ➔ A06 (Laptop & Smartphones)</div>
             <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.4rem' }}>
               <div style={{ width: `${zoneHighVal.rate}%`, height: '100%', background: '#10b981' }}></div>
             </div>
@@ -427,7 +412,7 @@ const Dashboard = () => {
               <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#3b82f6' }}>KHU LUÂN CHUYỂN VỪA (KỆ B1 & B2)</span>
               <span className="badge" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneLargeAppliance.rate}% sử dụng</span>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>8 Tầng B01 ➔ B08 (Tivi, Tủ Lạnh & Máy Giặt)</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>{zoneLargeAppliance.count} Tầng B01 ➔ B08 (Tivi, Tủ Lạnh & Máy Giặt)</div>
             <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.4rem' }}>
               <div style={{ width: `${zoneLargeAppliance.rate}%`, height: '100%', background: '#3b82f6' }}></div>
             </div>
@@ -443,7 +428,7 @@ const Dashboard = () => {
               <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#8b5cf6' }}>KHU MẬT ĐỘ CAO (KỆ C & KỆ D)</span>
               <span className="badge" style={{ background: '#8b5cf6', color: '#fff', fontSize: '0.7rem', fontWeight: 800 }}>{zoneAccessories.rate}% sử dụng</span>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>7 Tầng C01 ➔ C04 & D01 ➔ D03 (Phụ Kiện & Bảo Hành)</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>{zoneAccessories.count} Tầng C01 ➔ C04 & D01 ➔ D03 (Phụ Kiện & Bảo Hành)</div>
             <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.4rem' }}>
               <div style={{ width: `${zoneAccessories.rate}%`, height: '100%', background: '#8b5cf6' }}></div>
             </div>
@@ -474,7 +459,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="glass-card" style={{ maxWidth: '800px', margin: '0 auto 2rem' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '800px', margin: '0 auto 2rem' }}>
             {chartData && <Bar options={chartOptions} data={chartData} />}
           </div>
         </>
@@ -488,30 +473,34 @@ const Dashboard = () => {
             top: 0,
             right: 0,
             bottom: 0,
-            left: window.innerWidth <= 768 ? 0 : 'var(--sidebar-width, 280px)',
-            background: 'rgba(15, 23, 42, 0.65)',
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(7, 13, 36, 0.75)',
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
-            justify: 'center',
+            justifyContent: 'center',
             zIndex: 9999,
             padding: '1rem',
+            margin: 0,
+            boxSizing: 'border-box',
           }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowLowStockModal(false); }}
         >
           <div
             className="glass-card animate-scale-in"
             style={{
-              maxWidth: '980px',
-              width: '95%',
-              maxHeight: '88vh',
+              maxWidth: 'min(1440px, 98vw)',
+              width: '98vw',
+              maxHeight: '90vh',
               overflowY: 'auto',
-              padding: '1.75rem',
+              padding: '1.25rem 1.5rem',
               borderRadius: '16px',
-              background: 'var(--bg-card, #ffffff)',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
-              border: '1px solid var(--border-color)'
+              background: 'var(--bg-secondary, #ffffff)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.45)',
+              border: '1.5px solid var(--border-color)'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.85rem' }}>
@@ -528,19 +517,21 @@ const Dashboard = () => {
             </div>
 
             {reportData?.lowStockItems && reportData.lowStockItems.length > 0 ? (
-              <div className="table-container">
-                <table className="data-table" style={{ width: '100%', fontSize: '0.88rem' }}>
+              <div className="table-container" style={{ overflowX: 'auto' }}>
+                <table className="data-table" style={{ width: '100%', fontSize: '0.86rem' }}>
                   <thead>
                     <tr>
-                      <th style={{ textAlign: 'center', width: '50px' }}>STT</th>
-                      <th>Sản Phẩm</th>
-                      <th>Danh Mục</th>
-                      <th style={{ textAlign: 'center' }}>Tồn Hiện Tại</th>
-                      <th style={{ textAlign: 'center' }}>Ngưỡng An Toàn</th>
-                      <th style={{ textAlign: 'center' }}>Cần Bổ Sung</th>
-                      <th style={{ textAlign: 'right' }}>Đơn Giá</th>
-                      <th style={{ textAlign: 'right' }}>Chi Phí Dự Kiến</th>
-                      <th style={{ textAlign: 'center' }}>Thao Tác</th>
+                      <th style={{ textAlign: 'center', width: '45px', padding: '0.75rem 0.5rem' }}>STT</th>
+                      <th style={{ minWidth: '160px', padding: '0.75rem 0.65rem' }}>Sản Phẩm</th>
+                      <th style={{ minWidth: '105px', padding: '0.75rem 0.65rem' }}>Danh Mục</th>
+                      <th style={{ textAlign: 'center', minWidth: '90px', whiteSpace: 'nowrap', padding: '0.75rem 0.5rem' }}>Tồn Hiện Tại</th>
+                      <th style={{ textAlign: 'center', minWidth: '90px', whiteSpace: 'nowrap', padding: '0.75rem 0.5rem' }}>Ngưỡng An Toàn</th>
+                      <th style={{ textAlign: 'center', minWidth: '90px', whiteSpace: 'nowrap', padding: '0.75rem 0.5rem' }}>Cần Bổ Sung</th>
+                      <th style={{ textAlign: 'right', minWidth: '95px', whiteSpace: 'nowrap', padding: '0.75rem 0.65rem' }}>Đơn Giá</th>
+                      <th style={{ textAlign: 'right', minWidth: '110px', whiteSpace: 'nowrap', padding: '0.75rem 0.65rem' }}>Chi Phí Dự Kiến</th>
+                      {hasPermission('procurement:create') && (
+                        <th style={{ textAlign: 'center', width: '135px', minWidth: '135px', whiteSpace: 'nowrap', padding: '0.75rem 0.65rem' }}>Thao Tác</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -561,27 +552,44 @@ const Dashboard = () => {
                           <td>
                             <span className="badge badge-outline" style={{ fontSize: '0.75rem' }}>{p.category || 'Khác'}</span>
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <span className="badge badge-danger" style={{ fontWeight: 700 }}>{curQty} món</span>
                           </td>
-                          <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{minVal} món</td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{minVal} món</td>
+                          <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <strong style={{ color: 'var(--warning)', fontSize: '0.95rem' }}>+{needQty} món</strong>
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 500 }}>{fmtVND(unitPrice)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent-primary)' }}>{fmtVND(estCost)}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <button
-                              className="btn btn-primary"
-                              style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', background: 'var(--success)' }}
-                              onClick={() => {
-                                setShowLowStockModal(false);
-                                handleOpenInboundModal(p);
-                              }}
-                            >
-                              <Plus size={14} /> Nhập Hàng
-                            </button>
-                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtVND(unitPrice)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent-primary)', whiteSpace: 'nowrap' }}>{fmtVND(estCost)}</td>
+                          {hasPermission('procurement:create') && (
+                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{
+                                  padding: '0.42rem 0.85rem',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 600,
+                                  background: 'var(--success)',
+                                  color: '#ffffff',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                                  cursor: 'pointer',
+                                  flexShrink: 0
+                                }}
+                                onClick={() => {
+                                  setShowLowStockModal(false);
+                                  handleOpenInboundModal(p);
+                                }}
+                              >
+                                <Plus size={15} /> Nhập Hàng
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -598,128 +606,30 @@ const Dashboard = () => {
         document.body
       )}
 
-      {/* INBOUND TRANSACTION FORM MODAL */}
-      {showCreateTxModal && ReactDOM.createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            left: window.innerWidth <= 768 ? 0 : 'var(--sidebar-width, 280px)',
-            background: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justify: 'center',
-            zIndex: 10000,
-            padding: '1rem',
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowCreateTxModal(false); }}
-        >
-          <div
-            className="glass-card animate-scale-in"
-            style={{
-              maxWidth: '600px',
-              width: '95%',
-              padding: '1.75rem',
-              borderRadius: '16px',
-              background: 'var(--bg-card, #ffffff)',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
-              border: '1px solid var(--border-color)'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.85rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                <Plus size={24} color="var(--success)" />
-                <h3 className="text-title" style={{ fontSize: '1.25rem', margin: 0 }}>Tạo Giao Dịch Nhập Kho Mới</h3>
-              </div>
-              <button className="btn btn-outline" onClick={() => setShowCreateTxModal(false)}>✕ Đóng</button>
-            </div>
-
-            <form onSubmit={handleCreateTxSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '0.35rem' }}>
-                  Chọn Sản Phẩm Nhập Kho:
-                </label>
-                <div style={{ position: 'relative', marginBottom: '0.4rem' }}>
-                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Gõ tên hoặc SKU để lọc sản phẩm..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    style={{ paddingLeft: '2.2rem', fontSize: '0.85rem' }}
-                  />
-                </div>
-                <select
-                  required
-                  className="form-input"
-                  value={newTxForm.productId}
-                  onChange={(e) => setNewTxForm({ ...newTxForm, productId: e.target.value })}
-                  style={{ fontSize: '0.85rem', width: '100%' }}
-                >
-                  <option value="">-- Chọn sản phẩm --</option>
-                  {productsList
-                    .filter(p => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.sku.toLowerCase().includes(productSearch.toLowerCase()))
-                    .map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.sku}) - [Tồn: {p.quantity || 0} món]
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '0.35rem' }}>
-                    Loại Giao Dịch:
-                  </label>
-                  <input type="text" disabled className="form-input" value="NHẬP KHO (INBOUND)" style={{ background: 'var(--bg-secondary)', fontWeight: 700, color: 'var(--success)' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '0.35rem' }}>
-                    Số Lượng Nhập:
-                  </label>
-                  <input
-                    required
-                    type="number"
-                    min="1"
-                    className="form-input"
-                    value={newTxForm.quantity}
-                    onChange={(e) => setNewTxForm({ ...newTxForm, quantity: e.target.value })}
-                    style={{ fontSize: '0.9rem', fontWeight: 700 }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '0.35rem' }}>
-                  Ghi Chú Nhập Kho:
-                </label>
-                <textarea
-                  className="form-input"
-                  rows={3}
-                  placeholder="Ghi chú chi tiết ví dụ: Nhập hàng từ nhà cung cấp theo HĐ..."
-                  value={newTxForm.note}
-                  onChange={(e) => setNewTxForm({ ...newTxForm, note: e.target.value })}
-                  style={{ fontSize: '0.85rem', resize: 'vertical' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                <button type="button" className="btn btn-outline" onClick={() => setShowCreateTxModal(false)}>Hủy</button>
-                <button type="submit" className="btn btn-primary" disabled={submittingTx} style={{ background: 'var(--success)', minWidth: '130px' }}>
-                  {submittingTx ? 'Đang tạo...' : 'Xác Nhận Nhập Kho'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* CREATE REPLENISHMENT PO MODAL (IDENTICAL TO PROCUREMENT PO FORM) */}
+      <CreatePurchaseOrderModal
+        isOpen={showCreatePOModal}
+        onClose={() => {
+          setShowCreatePOModal(false);
+          setInboundProduct(null);
+        }}
+        title="Tạo Giao Dịch Nhập Kho Mới"
+        subtitle={
+          <>
+            Lập đơn đặt hàng nhập kho từ nhà cung cấp chính hãng qua{' '}
+            <strong>CỬA 01 - IN (CẢNG TIẾP NHẬN A)</strong>
+          </>
+        }
+        submitLabel="Tạo đơn đặt hàng mới"
+        initialProductId={inboundProduct?.id || ''}
+        initialProduct={inboundProduct}
+        initialQuantity={inboundNeedQty}
+        initialNotes={inboundNotes}
+        onSuccess={() => {
+          fetchReport();
+          fetchAnalytics();
+        }}
+      />
     </div>
   );
 };

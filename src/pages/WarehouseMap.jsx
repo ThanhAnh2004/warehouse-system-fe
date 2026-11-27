@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import apiClient from '../api/client';
+import { AuthContext } from '../context/AuthContext';
+import { useDialog } from '../context/DialogContext';
 import { 
   Map as MapIcon, Box, Search, RefreshCw, ArrowRightLeft, Sparkles, 
   Truck, Cpu, Compass, LayoutGrid, Laptop, Tv, Keyboard, Shield, Zap, Info, Layers, Table, PlusCircle, Package, X, AlertCircle
@@ -62,6 +64,9 @@ const getImageUrl = (url) => {
 };
 
 const WarehouseMap = () => {
+  const { hasPermission } = useContext(AuthContext);
+  const { showAlert, showConfirm } = useDialog();
+  const canAllocate = hasPermission('locations:allocate');
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedZone, setSelectedZone] = useState('ALL');
@@ -115,6 +120,14 @@ const WarehouseMap = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    setRelocateItem(null);
+    setShowAddForm(false);
+    setAddProductId('');
+    setAddProductSearch('');
+    setAddQty(1);
+  }, [selectedRack?.code]);
+
   const fetchUnallocatedProducts = async () => {
     try {
       setUnallocatedLoading(true);
@@ -127,15 +140,16 @@ const WarehouseMap = () => {
     }
   };
 
-  const fetchLocations = async () => {
+  const fetchLocations = async (keepSelectedCode = null) => {
     try {
       setLoading(true);
       const res = await apiClient.get('/inventory/locations');
       const data = res.data || [];
       setLocations(data);
       // Keep selected rack data updated if modal is open
-      if (selectedRack) {
-        const updated = data.find(l => l.code === selectedRack.code);
+      const codeToKeep = keepSelectedCode || selectedRack?.code;
+      if (codeToKeep) {
+        const updated = data.find(l => l.code === codeToKeep);
         if (updated) setSelectedRack(updated);
       }
     } catch (err) {
@@ -155,17 +169,17 @@ const WarehouseMap = () => {
   };
 
   const handleSuggestPutaway = async () => {
-    if (!putawayProductId) return alert('Vui lòng chọn sản phẩm!');
+    if (!putawayProductId) return showAlert('Vui lòng chọn sản phẩm!');
     try {
       const res = await apiClient.get(`/inventory/locations/suggest-putaway?productId=${putawayProductId}&quantity=${putawayQty}`);
       setPutawayResult(res.data);
     } catch (err) {
-      alert('Lỗi gợi ý vị trí: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi gợi ý vị trí: ' + (err.response?.data?.message || err.message));
     }
   };
 
   const handleRelocate = async () => {
-    if (!relocateItem || !targetLocation) return alert('Vui lòng chọn kệ đích!');
+    if (!relocateItem || !targetLocation) return showAlert('Vui lòng chọn kệ đích!');
     try {
       setRelocateLoading(true);
       await apiClient.post('/inventory/locations/relocate', {
@@ -174,42 +188,51 @@ const WarehouseMap = () => {
         toLocation: targetLocation,
         quantity: Number(relocateQty),
       });
-      alert('Chuyển vị trí sản phẩm thành công!');
+      showAlert('Chuyển vị trí sản phẩm thành công!');
       setRelocateItem(null);
-      fetchLocations();
+      await fetchLocations(selectedRack.code);
     } catch (err) {
-      alert('Lỗi chuyển vị trí: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi chuyển vị trí: ' + (err.response?.data?.message || err.message));
     } finally {
       setRelocateLoading(false);
     }
   };
 
-  const handleAddStockToRack = async (e) => {
+  const handleAllocateFromQueue = async (e) => {
     e.preventDefault();
-    if (!addProductId) return alert('Vui lòng chọn sản phẩm muốn xếp vào kệ!');
-    if (!addQty || addQty <= 0) return alert('Số lượng nhập phải lớn hơn 0!');
+    if (!addProductId) return showAlert('Vui lòng chọn sản phẩm trong hàng chờ phân kệ!');
+    const chosenProd = unallocatedProducts.find(p => p.productId === addProductId);
+    const qty = Number(addQty);
+    if (!qty || qty <= 0) return showAlert('Số lượng thêm vào kệ phải lớn hơn 0!');
+    if (chosenProd && qty > chosenProd.unallocatedQty) {
+      return showAlert(`Sản phẩm này chỉ còn ${chosenProd.unallocatedQty} ${chosenProd.unit || 'sản phẩm'} trong hàng chờ phân kệ!`);
+    }
 
-    const remaining = selectedRack.maxCapacity - (selectedRack.currentItemsCount || 0);
-    if (addQty > remaining) {
-      if (!window.confirm(`Cảnh báo: Kệ ${selectedRack.code} chỉ còn trống ${remaining} chỗ. Bạn vẫn muốn xếp vượt sức chứa?`)) {
-        return;
-      }
+    const remaining = selectedRack.maxCapacity > 0
+      ? Math.max(0, selectedRack.maxCapacity - (selectedRack.currentItemsCount || 0))
+      : Number.MAX_SAFE_INTEGER;
+    if (selectedRack.maxCapacity > 0 && qty > remaining) {
+      return showAlert(`Kệ ${selectedRack.code} chỉ còn trống ${remaining} chỗ, không thể xếp vượt sức chứa!`);
     }
 
     try {
       setAddLoading(true);
-      await apiClient.post('/inventory/locations/add-stock', {
+      const res = await apiClient.post('/inventory/locations/allocate', {
         productId: addProductId,
-        location: selectedRack.code,
-        quantity: Number(addQty)
+        toLocation: selectedRack.code,
+        quantity: qty,
       });
-      alert(`Đã thêm thành công ${addQty} sản phẩm vào kệ ${selectedRack.code}!`);
+      await Promise.all([
+        fetchLocations(selectedRack.code),
+        fetchUnallocatedProducts(),
+      ]);
       setShowAddForm(false);
       setAddProductId('');
-      setAddQty(10);
-      fetchLocations();
+      setAddProductSearch('');
+      setAddQty(1);
+      showAlert(res.data?.message || `Đã thêm thành công ${qty} ${chosenProd?.unit || 'sản phẩm'} vào kệ ${selectedRack.code}!`);
     } catch (err) {
-      alert('Lỗi thêm sản phẩm vào kệ: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi xếp sản phẩm vào kệ: ' + (err.response?.data?.message || err.message));
     } finally {
       setAddLoading(false);
     }
@@ -481,7 +504,7 @@ const WarehouseMap = () => {
           <div>
             <h1 className="text-title" style={{ marginBottom: 0 }}>Sơ Đồ Kiến Trúc Kho Hàng (Thế Giới Di Động & Điện Máy Xanh)</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
-              Hệ thống phân cấp: 3 Phân Khu Chức Năng • 6 Kệ Hàng (Rack) • 21 Vị Trí Tầng Kệ (Level) đa mặt hàng (Multi-SKU).
+              Hệ thống phân cấp: 3 Phân Khu Chức Năng • 6 Kệ Hàng (Rack) • {locations.length} Vị Trí Tầng Kệ (Level) đa mặt hàng (Multi-SKU).
             </p>
           </div>
         </div>
@@ -611,7 +634,7 @@ const WarehouseMap = () => {
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flex: 1 }}>
                             {getImageUrl(p.imageUrl) ? (
-                              <img src={getImageUrl(p.imageUrl)} alt="" style={{ width: '28px', height: '28px', borderRadius: '5px', objectFit: 'cover', flexShrink: 0 }} />
+                              <img src={getImageUrl(p.imageUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '28px', height: '28px', borderRadius: '5px', objectFit: 'cover', flexShrink: 0 }} />
                             ) : (
                               <div style={{ width: '28px', height: '28px', borderRadius: '5px', background: 'var(--accent-light)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 <Package size={14} />
@@ -787,15 +810,31 @@ const WarehouseMap = () => {
           </div>
 
           {putawayResult && (
-            <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>
-              🎯 Vị trí tối ưu: <b>{putawayResult.rack ? `${putawayResult.rack} - Tầng ${putawayResult.shelfLevel} (${putawayResult.suggestedLocation})` : `Vị trí ${putawayResult.suggestedLocation}`}</b> ({
-                putawayResult.reason
-                  ?.replace(/ZONE-ACCESSORIES/g, 'Khu Mật Độ Cao')
-                  ?.replace(/ZONE-HIGH-VAL/g, 'Khu Nhặt Hàng Nhanh')
-                  ?.replace(/ZONE-LARGE-APPLIANCE/g, 'Khu Luân Chuyển Vừa')
-                  ?.replace(/ZONE-SERVICE-RMA/g, 'Khu Mật Độ Cao')
-                  ?.replace(/ZONE-ESD-TEMP/g, 'Khu Mật Độ Cao')
-              })
+            <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', padding: '0.55rem 0.75rem', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div>
+                🎯 Vị trí tối ưu: <b>{putawayResult.rack ? `${putawayResult.rack} - Tầng ${putawayResult.shelfLevel} (${putawayResult.suggestedLocation})` : `Vị trí ${putawayResult.suggestedLocation}`}</b> ({
+                  putawayResult.reason
+                    ?.replace(/ZONE-ACCESSORIES/g, 'Khu Mật Độ Cao')
+                    ?.replace(/ZONE-HIGH-VAL/g, 'Khu Nhặt Hàng Nhanh')
+                    ?.replace(/ZONE-LARGE-APPLIANCE/g, 'Khu Luân Chuyển Vừa')
+                    ?.replace(/ZONE-SERVICE-RMA/g, 'Khu Mật Độ Cao')
+                    ?.replace(/ZONE-ESD-TEMP/g, 'Khu Mật Độ Cao')
+                })
+              </div>
+              {(() => {
+                const targetBin = locations.find((l) => l.code === putawayResult.suggestedLocation);
+                if (!targetBin) return null;
+                return (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline"
+                    onClick={() => setSelectedRack(targetBin)}
+                    style={{ padding: '3px 8px', fontSize: '0.75rem', borderColor: 'rgba(16,185,129,0.5)', color: '#059669', background: 'var(--bg-secondary)', whiteSpace: 'nowrap' }}
+                  >
+                    Xem Kệ {targetBin.code}
+                  </button>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -836,7 +875,7 @@ const WarehouseMap = () => {
             {/* BluePrint Header Bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#60a5fa', fontWeight: 700 }}>
-                <LayoutGrid size={18} /> SƠ ĐỒ MẶT BẰNG KHO: 3 PHÂN KHU CHỨC NĂNG • 6 KỆ HÀNG • 21 TẦNG LƯU TRỮ ĐA HÀNG HÓA (MULTI-SKU)
+                <LayoutGrid size={18} /> SƠ ĐỒ MẶT BẰNG KHO: 3 PHÂN KHU CHỨC NĂNG • 6 KỆ HÀNG • {locations.length} TẦNG LƯU TRỮ ĐA HÀNG HÓA (MULTI-SKU)
               </div>
 
               {/* Legend Badges */}
@@ -945,7 +984,7 @@ const WarehouseMap = () => {
                     <td style={{ padding: '0.85rem', fontWeight: 700, color: '#60a5fa', fontSize: '0.9rem' }}>
                       {loc.rack || `Kệ ${loc.aisle}`}
                     </td>
-                    <td style={{ padding: '0.85rem', fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>
+                    <td style={{ padding: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
                       Tầng {loc.shelfLevel || 1}
                     </td>
                     <td style={{ padding: '0.85rem' }}>
@@ -1000,10 +1039,34 @@ const WarehouseMap = () => {
         </div>
       )}
 
-      {/* Rack Details Modal & Direct Add Product to Rack Action */}
-      {selectedRack && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div className="glass-card animate-slide-up" style={{ width: '100%', maxWidth: '650px', padding: '1.5rem', background: 'var(--bg-secondary)', maxHeight: '90vh', overflowY: 'auto' }}>
+      {/* Rack Details Modal via Portal (Strict Viewport Center) */}
+      {selectedRack && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '1rem',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedRack(null);
+              setRelocateItem(null);
+              setShowAddForm(false);
+              setAddProductId('');
+              setAddProductSearch('');
+            }
+          }}
+        >
+          <div role="dialog" aria-modal="true" className="glass-card animate-slide-up" style={{ width: '100%', maxWidth: '650px', padding: '1.5rem', background: 'var(--bg-secondary)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 25px 60px -15px rgba(0,0,0,0.45)' }}>
             
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
@@ -1015,7 +1078,7 @@ const WarehouseMap = () => {
                   Mã vị trí: <b>{selectedRack.code}</b> | Phân khu: {getZoneMeta(selectedRack.zone)?.name || selectedRack.zone}
                 </span>
               </div>
-              <button className="btn btn-outline" onClick={() => { setSelectedRack(null); setRelocateItem(null); setShowAddForm(false); }}>✕ Đóng</button>
+              <button className="btn btn-outline" onClick={() => { setSelectedRack(null); setRelocateItem(null); setShowAddForm(false); setAddProductId(''); setAddProductSearch(''); }}>✕ Đóng</button>
             </div>
 
             {/* CAPACITY & AVAILABILITY DISPLAY CARD */}
@@ -1086,9 +1149,175 @@ const WarehouseMap = () => {
             })()}
 
             {/* TITLE BAR: PRODUCTS ON THIS RACK */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', gap: '0.75rem', flexWrap: 'wrap' }}>
               <h4 style={{ fontSize: '0.95rem', margin: 0 }}>Các sản phẩm đang xếp trên tầng này ({selectedRack.items?.length || 0}):</h4>
+              {canAllocate && (
+                <button
+                  type="button"
+                  className={showAddForm ? 'btn btn-outline' : 'btn btn-primary'}
+                  style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => {
+                    const nextOpen = !showAddForm;
+                    setShowAddForm(nextOpen);
+                    setRelocateItem(null);
+                    setAddProductId('');
+                    setAddProductSearch('');
+                    setAddQty(1);
+                    if (nextOpen) fetchUnallocatedProducts();
+                  }}
+                >
+                  <PlusCircle size={15} />
+                  {showAddForm ? 'Đóng Form Thêm' : 'Thêm SP từ hàng chờ'}
+                  {!showAddForm && unallocatedProducts.length > 0 && (
+                    <span style={{
+                      background: 'rgba(255,255,255,0.25)',
+                      color: '#fff',
+                      borderRadius: '999px',
+                      padding: '1px 7px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                    }}>
+                      {unallocatedProducts.length}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
+
+            {/* Inline Add Product From Unallocated Queue Form */}
+            {showAddForm && canAllocate && (() => {
+              const currentUsed = selectedRack.currentItemsCount || 0;
+              const maxCap = selectedRack.maxCapacity || 0;
+              const remaining = maxCap > 0 ? Math.max(0, maxCap - currentUsed) : 999999;
+              const filteredQueue = unallocatedProducts.filter((p) => {
+                const q = normalizeText(addProductSearch);
+                if (!q) return true;
+                return normalizeText(p.name).includes(q) || normalizeText(p.sku).includes(q);
+              });
+              const chosenProd = unallocatedProducts.find((p) => p.productId === addProductId);
+              const maxAllowed = chosenProd ? Math.max(0, Math.min(chosenProd.unallocatedQty, remaining)) : 0;
+
+              return (
+                <form
+                  onSubmit={handleAllocateFromQueue}
+                  style={{
+                    padding: '1rem',
+                    background: 'rgba(16, 185, 129, 0.08)',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(16, 185, 129, 0.45)',
+                    marginBottom: '1rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <h4 style={{ margin: 0, color: '#059669', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Package size={16} /> Thêm Sản Phẩm Từ Hàng Chờ Vào {selectedRack.rack || `Kệ ${selectedRack.aisle}`} - Tầng {selectedRack.shelfLevel || 1} ({selectedRack.code})
+                    </h4>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: remaining > 0 ? '#059669' : '#dc2626' }}>
+                      {maxCap > 0 ? `Còn trống: ${remaining} chỗ` : 'Không giới hạn chỗ'}
+                    </span>
+                  </div>
+
+                  {unallocatedLoading && unallocatedProducts.length === 0 ? (
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '0.5rem 0' }}>
+                      Đang tải danh sách hàng chờ phân kệ...
+                    </div>
+                  ) : unallocatedProducts.length === 0 ? (
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '8px', textAlign: 'center' }}>
+                      Hiện không có sản phẩm nào trong hàng chờ phân kệ.
+                    </div>
+                  ) : maxCap > 0 && remaining <= 0 ? (
+                    <div style={{ fontSize: '0.85rem', color: '#dc2626', padding: '0.75rem', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '8px' }}>
+                      Tầng kệ {selectedRack.code} đã đạt sức chứa tối đa ({maxCap} sản phẩm). Vui lòng chọn tầng khác còn trống hoặc chuyển bớt hàng ra ngoài trước.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ marginBottom: '0.65rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', fontWeight: 600 }}>
+                          Tìm & chọn sản phẩm trong hàng chờ phân kệ ({unallocatedProducts.length} sản phẩm):
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Lọc nhanh theo tên sản phẩm hoặc mã SKU..."
+                          value={addProductSearch}
+                          onChange={(e) => setAddProductSearch(e.target.value)}
+                          style={{ fontSize: '0.84rem', marginBottom: '0.5rem' }}
+                        />
+                        <select
+                          className="form-input"
+                          value={addProductId}
+                          onChange={(e) => {
+                            const nextId = e.target.value;
+                            setAddProductId(nextId);
+                            const picked = unallocatedProducts.find((p) => p.productId === nextId);
+                            if (picked) {
+                              setAddQty(Math.max(1, Math.min(picked.unallocatedQty, remaining)));
+                            }
+                          }}
+                          required
+                          style={{ fontSize: '0.85rem' }}
+                        >
+                          <option value="">-- Chọn sản phẩm trong hàng chờ phân kệ ({filteredQueue.length}) --</option>
+                          {filteredQueue.map((p) => (
+                            <option key={p.productId} value={p.productId}>
+                              {p.name} ({p.sku}) — Chờ kệ: {p.unallocatedQty} {p.unit || 'Chiếc'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {chosenProd && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.75rem', alignItems: 'end', marginBottom: '0.75rem' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem', fontWeight: 600 }}>
+                              Số lượng xếp lên kệ (Chờ kệ: {chosenProd.unallocatedQty} {chosenProd.unit || 'Chiếc'} | Tối đa có thể xếp: {maxAllowed}):
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={maxAllowed}
+                              className="form-input"
+                              value={addQty}
+                              onChange={(e) => setAddQty(e.target.value === '' ? '' : Number(e.target.value))}
+                              required
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            style={{ padding: '0.55rem 0.85rem', fontSize: '0.82rem' }}
+                            onClick={() => setAddQty(maxAllowed)}
+                          >
+                            Tối đa ({maxAllowed})
+                          </button>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          onClick={() => {
+                            setShowAddForm(false);
+                            setAddProductId('');
+                            setAddProductSearch('');
+                          }}
+                        >
+                          Hủy
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn btn-primary"
+                          disabled={addLoading || !addProductId || Number(addQty) <= 0 || Number(addQty) > maxAllowed}
+                        >
+                          {addLoading ? 'Đang xếp vào kệ...' : 'Xác Nhận Thêm Vào Kệ'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </form>
+              );
+            })()}
 
             {/* List of items on this Rack Level */}
             {selectedRack.items && selectedRack.items.length > 0 ? (
@@ -1104,9 +1333,11 @@ const WarehouseMap = () => {
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>SKU: {it.productSku} | Số lượng: <b>{it.quantity} món</b></div>
                         </div>
                       </div>
-                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => { setRelocateItem(it); setRelocateQty(it.quantity); setShowAddForm(false); }}>
-                        <ArrowRightLeft size={14} /> Chuyển Tầng
-                      </button>
+                      {canAllocate && (
+                        <button className="btn btn-outline" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => { setRelocateItem(it); setRelocateQty(it.quantity); setShowAddForm(false); }}>
+                          <ArrowRightLeft size={14} /> Chuyển Tầng
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1146,7 +1377,8 @@ const WarehouseMap = () => {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* UNALLOCATED PRODUCTS MODAL */}
@@ -1224,12 +1456,19 @@ const WarehouseMap = () => {
                     }}>
                       <div style={{ textAlign: 'center' }}>
                         {getImageUrl(p.imageUrl) ? (
-                          <img src={getImageUrl(p.imageUrl)} alt={p.name} style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} />
-                        ) : (
-                          <div style={{ width: '48px', height: '48px', background: 'var(--bg-secondary)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Box size={24} color="var(--text-secondary)" />
-                          </div>
-                        )}
+                          <img
+                            src={getImageUrl(p.imageUrl)}
+                            alt={p.name}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'flex';
+                            }}
+                            style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }}
+                          />
+                        ) : null}
+                        <div style={{ width: '48px', height: '48px', background: 'var(--bg-secondary)', borderRadius: '8px', display: getImageUrl(p.imageUrl) ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
+                          <Box size={24} color="var(--text-secondary)" />
+                        </div>
                       </div>
 
                       <div>
@@ -1260,21 +1499,23 @@ const WarehouseMap = () => {
                         </span>
                       </div>
 
-                      <button
-                        className="btn btn-primary"
-                        style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', gap: '4px', justifyContent: 'center' }}
-                        onClick={() => {
-                          setPutawayProductId(p.productId);
-                          setPutawayQty(p.unallocatedQty);
-                          setShowUnallocatedModal(false);
-                          // Auto trigger AI Suggestion
-                          apiClient.get(`/inventory/locations/suggest-putaway?productId=${p.productId}&quantity=${p.unallocatedQty}`)
-                            .then(res => setPutawayResult(res.data))
-                            .catch(() => {});
-                        }}
-                      >
-                        <Sparkles size={14} /> Gợi Ý Kệ
-                      </button>
+                      {canAllocate && (
+                        <button
+                          className="btn btn-primary"
+                          style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', gap: '4px', justifyContent: 'center' }}
+                          onClick={() => {
+                            setPutawayProductId(p.productId);
+                            setPutawayQty(p.unallocatedQty);
+                            setShowUnallocatedModal(false);
+                            // Auto trigger AI Suggestion
+                            apiClient.get(`/inventory/locations/suggest-putaway?productId=${p.productId}&quantity=${p.unallocatedQty}`)
+                              .then(res => setPutawayResult(res.data))
+                              .catch(() => {});
+                          }}
+                        >
+                          <Sparkles size={14} /> Gợi Ý Kệ
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

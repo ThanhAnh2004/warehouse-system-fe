@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
+import { useDialog } from '../context/DialogContext';
+import { AuthContext } from '../context/AuthContext';
 import {
   ShoppingCart,
   Plus,
@@ -32,6 +34,7 @@ const STATUS_COLORS = {
   PICKING: { label: 'Đang soạn hàng', bg: '#f3e8ff', text: '#7e22ce', border: '#e9d5ff' },
   PACKED: { label: 'Đã đóng gói + Serial', bg: '#ffedd5', text: '#c2410c', border: '#fed7aa' },
   DISPATCHED: { label: 'Đã xuất xưởng (Cửa 02)', bg: '#dcfce7', text: '#15803d', border: '#bbf7d0' },
+  CANCELLED: { label: 'Đã hủy (Nhả tồn kho)', bg: '#f1f5f9', text: '#475569', border: '#cbd5e1' },
   OUT_OF_STOCK: { label: 'Hết hàng (Saga bù trừ)', bg: '#fee2e2', text: '#b91c1c', border: '#fecaca' },
 };
 
@@ -40,6 +43,8 @@ const formatVND = (amount) => {
 };
 
 const Orders = () => {
+  const { showAlert, showConfirm } = useDialog();
+  const { user, isSystemAdmin, hasPermission } = useContext(AuthContext);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -82,6 +87,7 @@ const Orders = () => {
 
   // Pick Item Form State
   const [pickingItems, setPickingItems] = useState({});
+  const [confirmingPickId, setConfirmingPickId] = useState(null);
 
   useEffect(() => {
     fetchOrders();
@@ -134,7 +140,7 @@ const Orders = () => {
 
   const handlePriceChange = (index, price) => {
     const newItems = [...orderForm.items];
-    newItems[index].unitPrice = Math.max(0, Number(price));
+    newItems[index].unitPrice = price === '' ? '' : Math.max(0, Number(price));
     setOrderForm({ ...orderForm, items: newItems });
   };
 
@@ -165,14 +171,21 @@ const Orders = () => {
     try {
       setSubmitting(true);
       setSagaFeedback(null);
-      const validItems = orderForm.items.filter((i) => i.productId);
+      const validItems = orderForm.items
+        .filter((i) => i.productId)
+        .map((it) => ({
+          ...it,
+          unitPrice: Number(it.unitPrice) || 0,
+        }));
       if (validItems.length === 0) {
-        alert('Vui lòng chọn ít nhất một sản phẩm cho đơn hàng!');
+        showAlert('Vui lòng chọn ít nhất một sản phẩm cho đơn hàng!');
         return;
       }
 
       const res = await apiClient.post('/orders', {
         ...orderForm,
+        shippingFee,
+        totalAmount: calculatedOrderTotal,
         items: validItems,
       });
 
@@ -196,7 +209,7 @@ const Orders = () => {
         }, 2500);
       }
     } catch (err) {
-      alert('Lỗi tạo đơn hàng: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi tạo đơn hàng: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -227,33 +240,53 @@ const Orders = () => {
   };
 
   const handleConfirmPick = async (itemId) => {
+    if (confirmingPickId === itemId) return;
     const input = pickingItems[itemId] || {};
     try {
+      setConfirmingPickId(itemId);
       await apiClient.post('/orders/pick-list-item/confirm', {
         itemId,
         pickedQuantity: Number(input.pickedQuantity) || 1,
         serialNumbers: input.serialNumbers || '',
       });
-      alert('Đã cập nhật trạng thái nhặt hàng & Serial/IMEI thành công!');
+      showAlert('Đã cập nhật trạng thái nhặt hàng & Serial/IMEI thành công!');
       if (selectedOrder) {
         const res = await apiClient.get(`/orders/${selectedOrder.id}/pick-list`);
         setPickList(res.data);
       }
       fetchOrders();
     } catch (err) {
-      alert('Lỗi cập nhật: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi cập nhật: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setConfirmingPickId(null);
     }
   };
 
   const handleDispatch = async (orderId) => {
-    if (!window.confirm('Xác nhận xuất xưởng đơn hàng qua [CỬA 02 - OUT]? Tồn kho thực tế sẽ được trừ vĩnh viễn.')) return;
+    if (!(await showConfirm('Xác nhận xuất xưởng đơn hàng qua [CỬA 02 - OUT]? Tồn kho thực tế sẽ được trừ vĩnh viễn.'))) return;
     try {
       await apiClient.post(`/orders/${orderId}/dispatch`);
-      alert('Đơn hàng đã xuất kho thành công qua CỬA 02 - OUT!');
+      showAlert('Đơn hàng đã xuất kho thành công qua CỬA 02 - OUT!');
       fetchOrders();
       if (showPickModal) setShowPickModal(false);
     } catch (err) {
-      alert('Lỗi xuất xưởng: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi xuất xưởng: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleCancelOrder = async (order) => {
+    const confirmed = await showConfirm(
+      `Xác nhận hủy đơn [${order.orderNumber}]? Hệ thống sẽ chạy Saga bù trừ để hoàn trả toàn bộ tồn kho đang giữ chỗ về trạng thái khả dụng.`,
+      'Xác Nhận Hủy Đơn Hàng',
+    );
+    if (!confirmed) return;
+    try {
+      await apiClient.post(`/orders/${order.id}/cancel`);
+      showAlert(`Đã hủy đơn [${order.orderNumber}] và hoàn trả tồn kho giữ chỗ thành công!`, 'success', 'Hủy Đơn Thành Công');
+      fetchOrders();
+      if (showSagaModal) setShowSagaModal(false);
+    } catch (err) {
+      showAlert('Lỗi hủy đơn hàng: ' + (err.response?.data?.message || err.message), 'error', 'Lỗi');
     }
   };
 
@@ -263,10 +296,12 @@ const Orders = () => {
   const packedCount = orders.filter((o) => o.status === 'PACKED').length;
   const dispatchedCount = orders.filter((o) => o.status === 'DISPATCHED').length;
 
-  const calculatedOrderTotal = orderForm.items.reduce(
+  const shippingFee = orderForm.priority === 'HIGH' ? 100000 : 50000;
+  const itemsTotal = orderForm.items.reduce(
     (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
     0
   );
+  const calculatedOrderTotal = itemsTotal + shippingFee;
 
   return (
     <div className="animate-slide-up" style={{ paddingBottom: '3rem' }}>
@@ -282,14 +317,16 @@ const Orders = () => {
           </p>
         </div>
 
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowCreateModal(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-        >
-          <Plus size={18} />
-          <span>Tạo Đơn Hàng Mới</span>
-        </button>
+        {(isSystemAdmin || hasPermission('orders:create')) && (
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowCreateModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <Plus size={18} />
+            <span>Tạo Đơn Hàng Mới</span>
+          </button>
+        )}
       </div>
 
       {/* KPI Stats Cards */}
@@ -338,7 +375,7 @@ const Orders = () => {
       {/* Filter and Search Bar */}
       <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {['ALL', 'ALLOCATED', 'PICKING', 'PACKED', 'DISPATCHED', 'OUT_OF_STOCK'].map((st) => (
+          {['ALL', 'ALLOCATED', 'PICKING', 'PACKED', 'DISPATCHED', 'OUT_OF_STOCK', 'CANCELLED'].map((st) => (
             <button
               key={st}
               className={`btn btn-sm ${statusFilter === st ? 'btn-primary' : 'btn-outline'}`}
@@ -409,25 +446,19 @@ const Orders = () => {
                         {order.orderType === 'WARRANTY_DISPATCH' && 'Đổi Trả Bảo Hành'}
                       </div>
                       {order.priority === 'HIGH' ? (
-                        <span style={{ fontSize: '0.75rem', background: '#fee2e2', color: '#b91c1c', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                        <span style={{ fontSize: '0.75rem', background: 'var(--danger-light)', color: 'var(--danger)', padding: '2px 6px', borderRadius: 4, fontWeight: 700, border: '1px solid var(--danger)' }}>
                           ⚡ HỎA TỐC
                         </span>
                       ) : (
-                        <span style={{ fontSize: '0.75rem', background: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: 4 }}>
+                        <span style={{ fontSize: '0.75rem', background: 'var(--bg-glass)', color: 'var(--text-secondary)', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border-color)' }}>
                           Tiêu chuẩn
                         </span>
                       )}
                     </td>
                     <td style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>
                       <span
+                        className={`status-pill status-pill-${order.status?.toLowerCase().replace(/_/g, '-')}`}
                         style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
                           background: st.bg,
                           color: st.text,
                           border: `1px solid ${st.border}`,
@@ -457,7 +488,7 @@ const Orders = () => {
                           <span style={{ marginLeft: 4, fontSize: '0.75rem' }}>Saga</span>
                         </button>
 
-                        {(order.status === 'ALLOCATED' || order.status === 'PICKING' || order.status === 'PACKED') && (
+                        {(order.status === 'ALLOCATED' || order.status === 'PICKING' || order.status === 'PACKED') && (isSystemAdmin || hasPermission('orders:pick')) && (
                           <button
                             className="btn btn-sm btn-primary"
                             title="Phiếu Soạn Hàng Theo Kệ & Serial"
@@ -469,7 +500,7 @@ const Orders = () => {
                           </button>
                         )}
 
-                        {order.status === 'PACKED' && (
+                        {order.status === 'PACKED' && (isSystemAdmin || hasPermission('orders:dispatch')) && (
                           <button
                             className="btn btn-sm"
                             title="Xuất xưởng Cửa 02 - OUT"
@@ -480,6 +511,19 @@ const Orders = () => {
                             <span style={{ marginLeft: 4, fontSize: '0.75rem' }}>Xuất Cửa 02</span>
                           </button>
                         )}
+
+                        {(order.status === 'ALLOCATED' || order.status === 'PICKING' || order.status === 'PACKED') &&
+                          (isSystemAdmin || hasPermission('orders:create') || hasPermission('orders:dispatch')) && (
+                            <button
+                              className="btn btn-sm btn-outline"
+                              title="Hủy đơn & Nhả tồn kho giữ chỗ (Saga)"
+                              onClick={() => handleCancelOrder(order)}
+                              style={{ padding: '4px 8px', color: '#dc2626', borderColor: 'rgba(220,38,38,0.35)' }}
+                            >
+                              <X size={14} />
+                              <span style={{ marginLeft: 4, fontSize: '0.75rem' }}>Hủy Đơn</span>
+                            </button>
+                          )}
                       </div>
                     </td>
                   </tr>
@@ -543,7 +587,7 @@ const Orders = () => {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Tạo Đơn Hàng Mới (Khóa Tồn Kho Phân Tán Saga)
+                    Tạo Đơn Hàng Mới
                   </h3>
                   <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                     Tự động điều phối giữ hàng an toàn theo thời gian thực và sinh Phiếu Soạn Hàng
@@ -650,17 +694,22 @@ const Orders = () => {
                     </div>
 
                     <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label">
-                        <Zap size={14} color="var(--accent-primary)" />
-                        Mức độ ưu tiên
-                      </label>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                        <label className="form-label" style={{ margin: 0 }}>
+                          <Zap size={14} color="var(--accent-primary)" />
+                          Mức độ ưu tiên
+                        </label>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: orderForm.priority === 'HIGH' ? '#ef4444' : '#0284c7', background: orderForm.priority === 'HIGH' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(2, 132, 199, 0.12)', padding: '2px 8px', borderRadius: '6px' }}>
+                          Phí ship: {formatVND(shippingFee)}
+                        </span>
+                      </div>
                       <select
                         className="input select"
                         value={orderForm.priority}
                         onChange={(e) => setOrderForm({ ...orderForm, priority: e.target.value })}
                       >
-                        <option value="NORMAL">Tiêu Chuẩn (24h)</option>
-                        <option value="HIGH">Hỏa Tốc Giao Ngay (2h Express)</option>
+                        <option value="NORMAL">Tiêu Chuẩn (24h) - Phí ship: 50.000 đ</option>
+                        <option value="HIGH">Hỏa Tốc Giao Ngay (2h Express) - Phí ship: 100.000 đ</option>
                       </select>
                     </div>
                   </div>
@@ -740,7 +789,8 @@ const Orders = () => {
                           type="number"
                           min="0"
                           className="input"
-                          value={item.unitPrice}
+                          value={item.unitPrice ?? ''}
+                          placeholder="0"
                           onChange={(e) => handlePriceChange(idx, e.target.value)}
                           style={{ textAlign: 'right' }}
                         />
@@ -778,11 +828,29 @@ const Orders = () => {
               </div>
 
               {/* Fixed Footer */}
-              <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', padding: '1rem 1.75rem', background: 'var(--bg-secondary, #ffffff)', gap: '1rem' }}>
-                <div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tổng giá trị đơn hàng:</div>
-                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent-primary)' }}>
-                    {formatVND(calculatedOrderTotal)}
+              <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', padding: '1rem 1.75rem', background: 'var(--bg-secondary, #ffffff)', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tiền hàng:</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {formatVND(itemsTotal)}
+                    </div>
+                  </div>
+
+                  <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '1.25rem' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      Phí vận chuyển ({orderForm.priority === 'HIGH' ? '⚡ Hỏa tốc' : 'Tiêu chuẩn'}):
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: orderForm.priority === 'HIGH' ? 'var(--danger, #ef4444)' : 'var(--accent-primary)' }}>
+                      +{formatVND(shippingFee)}
+                    </div>
+                  </div>
+
+                  <div style={{ borderLeft: '2px solid var(--border-color)', paddingLeft: '1.25rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Tổng thanh toán:</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent-primary)' }}>
+                      {formatVND(calculatedOrderTotal)}
+                    </div>
                   </div>
                 </div>
 
@@ -802,7 +870,7 @@ const Orders = () => {
                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.5rem' }}
                   >
                     <CheckCircle2 size={16} />
-                    <span>{submitting ? 'Đang thực thi Saga...' : 'Xác Nhận Đặt Hàng (Saga)'}</span>
+                    <span>{submitting ? 'Đang thực thi Saga...' : 'Xác Nhận Đặt Hàng'}</span>
                   </button>
                 </div>
               </div>
@@ -914,7 +982,19 @@ const Orders = () => {
             </div>
 
             {/* Pinned Footer */}
-            <div style={{ flexShrink: 0, textAlign: 'right', borderTop: '1px solid var(--border-color)', padding: '1rem 1.5rem', background: 'var(--bg-secondary, #ffffff)' }}>
+            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', padding: '1rem 1.5rem', background: 'var(--bg-secondary, #ffffff)' }}>
+              <div>
+                {(selectedOrder.status === 'ALLOCATED' || selectedOrder.status === 'PICKING' || selectedOrder.status === 'PACKED') &&
+                  (isSystemAdmin || hasPermission('orders:create') || hasPermission('orders:dispatch')) && (
+                    <button
+                      className="btn btn-outline"
+                      onClick={() => handleCancelOrder(selectedOrder)}
+                      style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.4)' }}
+                    >
+                      Hủy Đơn & Nhả Tồn Kho
+                    </button>
+                  )}
+              </div>
               <button className="btn btn-outline" onClick={() => setShowSagaModal(false)}>
                 Đóng
               </button>
@@ -1029,7 +1109,7 @@ const Orders = () => {
                       <div>
                         <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>SL cần soạn:</label>
                         <div style={{ fontWeight: 800, fontSize: '1.15rem', color: 'var(--accent-primary)' }}>
-                          {item.pickedQuantity} / {item.quantityToPick} chiếc
+                          {item.pickedQuantity} / {item.quantityToPick} {availableProducts.find((p) => p.id === item.productId)?.unit || 'chiếc'}
                         </div>
                       </div>
 
@@ -1056,10 +1136,11 @@ const Orders = () => {
                           <button
                             type="button"
                             className="btn btn-sm btn-primary"
+                            disabled={confirmingPickId === item.id}
                             onClick={() => handleConfirmPick(item.id)}
                             style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                           >
-                            <CheckCircle2 size={14} /> Xác nhận
+                            <CheckCircle2 size={14} /> {confirmingPickId === item.id ? 'Đang lưu...' : 'Xác nhận'}
                           </button>
                         ) : (
                           <span style={{ fontSize: '0.8rem', color: '#15803d', fontWeight: 600 }}>Đã khóa</span>
@@ -1081,7 +1162,7 @@ const Orders = () => {
                 <button className="btn btn-outline" onClick={() => setShowPickModal(false)}>
                   Đóng
                 </button>
-                {selectedOrder.status === 'PACKED' && (
+                {selectedOrder.status === 'PACKED' && (isSystemAdmin || hasPermission('orders:dispatch')) && (
                   <button
                     className="btn btn-primary"
                     onClick={() => handleDispatch(selectedOrder.id)}

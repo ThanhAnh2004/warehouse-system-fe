@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import apiClient from '../api/client';
+import { AuthContext } from '../context/AuthContext';
+import { useDialog } from '../context/DialogContext';
 import { Server, Database, Cpu, Box, Radio, RefreshCw, CheckCircle2, XCircle, Activity, ExternalLink, RotateCcw, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 const CATEGORY_META = {
@@ -11,6 +13,9 @@ const CATEGORY_META = {
 };
 
 const SystemHealth = () => {
+  const { hasPermission } = useContext(AuthContext);
+  const { showAlert, showConfirm } = useDialog();
+  const canManageSystem = hasPermission('system:manage');
   const [data, setData] = useState(null);
   const [busData, setBusData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -44,24 +49,24 @@ const SystemHealth = () => {
     try {
       setActionMessage(`Đang đẩy lại tin nhắn từ ${dlqName}...`);
       const res = await apiClient.post('/system/message-bus/requeue-dlq', { dlqName, targetQueue });
-      alert(res.data.message);
+      showAlert(res.data.message);
       fetchHealth();
     } catch (err) {
-      alert('Lỗi khi Replay DLQ: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi khi Replay DLQ: ' + (err.response?.data?.message || err.message));
     } finally {
       setActionMessage('');
     }
   };
 
   const handlePurgeQueue = async (queueName) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa toàn bộ tin nhắn lỗi trong hàng đợi [${queueName}]?`)) return;
+    if (!(await showConfirm(`Bạn có chắc chắn muốn xóa toàn bộ tin nhắn lỗi trong hàng đợi [${queueName}]?`))) return;
     try {
       setActionMessage(`Đang xóa dọn dẹp hàng đợi ${queueName}...`);
       const res = await apiClient.post('/system/message-bus/purge-queue', { queueName });
-      alert(res.data.message);
+      showAlert(res.data.message);
       fetchHealth();
     } catch (err) {
-      alert('Lỗi khi dọn dẹp hàng đợi: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi khi dọn dẹp hàng đợi: ' + (err.response?.data?.message || err.message));
     } finally {
       setActionMessage('');
     }
@@ -286,7 +291,7 @@ const SystemHealth = () => {
                     <th>Tin Nhắn Đang Chờ</th>
                     <th>Lỗi Hàng Đợi Thư Chết (DLQ)</th>
                     <th>Trạng Thái Queue</th>
-                    <th style={{ textAlign: 'center' }}>Thao Tác Xử Lý Lỗi</th>
+                    {canManageSystem && <th style={{ textAlign: 'center' }}>Thao Tác Xử Lý Lỗi</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -326,29 +331,31 @@ const SystemHealth = () => {
                             {hasErrors ? 'CÓ LỖI DLQ' : isOnline ? 'HOẠT ĐỘNG' : 'MẤT KẾT NỐI'}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                            <button
-                              className="btn btn-outline"
-                              onClick={() => handleRequeueDlq(q.deadLetterQueue, q.queue)}
-                              disabled={!hasErrors}
-                              title="Thử lại toàn bộ tin nhắn lỗi trong Dead Letter Queue"
-                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', opacity: hasErrors ? 1 : 0.4 }}
-                            >
-                              <RotateCcw size={14} /> Replay DLQ
-                            </button>
+                        {canManageSystem && (
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                              <button
+                                className="btn btn-outline"
+                                onClick={() => handleRequeueDlq(q.deadLetterQueue, q.queue)}
+                                disabled={!hasErrors}
+                                title="Thử lại toàn bộ tin nhắn lỗi trong Dead Letter Queue"
+                                style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', opacity: hasErrors ? 1 : 0.4 }}
+                              >
+                                <RotateCcw size={14} /> Replay DLQ
+                              </button>
 
-                            <button
-                              className="btn btn-outline"
-                              onClick={() => handlePurgeQueue(q.deadLetterQueue)}
-                              disabled={!hasErrors}
-                              title="Xóa dọn dẹp Hàng đợi thư chết"
-                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', color: 'var(--danger)', opacity: hasErrors ? 1 : 0.4 }}
-                            >
-                              <Trash2 size={14} /> Clear DLQ
-                            </button>
-                          </div>
-                        </td>
+                              <button
+                                className="btn btn-outline"
+                                onClick={() => handlePurgeQueue(q.deadLetterQueue)}
+                                disabled={!hasErrors}
+                                title="Xóa dọn dẹp Hàng đợi thư chết"
+                                style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', color: 'var(--danger)', opacity: hasErrors ? 1 : 0.4 }}
+                              >
+                                <Trash2 size={14} /> Clear DLQ
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import apiClient from '../api/client';
+import { AuthContext } from '../context/AuthContext';
+import { useDialog } from '../context/DialogContext';
 import { Layers, RefreshCw, Search, Plus, Edit2, Trash2, X, Save, AlertTriangle } from 'lucide-react';
 
 const ZONE_TRANSLATIONS = {
@@ -17,6 +19,11 @@ const getZoneMeta = (zoneKey) => {
 };
 
 const LocationManagement = () => {
+  const { hasPermission } = useContext(AuthContext);
+  const { showAlert, showConfirm } = useDialog();
+  const canCreate = hasPermission('locations:create');
+  const canUpdate = hasPermission('locations:update');
+  const canDelete = hasPermission('locations:delete');
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -97,16 +104,16 @@ const LocationManagement = () => {
 
   const handleSaveAdd = async (e) => {
     e.preventDefault();
-    if (!form.code.trim()) return alert('Vui lòng nhập Mã Tầng kho!');
+    if (!form.code.trim()) return showAlert('Vui lòng nhập Mã Tầng kho!');
 
     try {
       setSubmitting(true);
       await apiClient.post('/inventory/locations', form);
-      alert('Đã thêm Tầng kho mới thành công!');
+      showAlert('Đã thêm Tầng kho mới thành công!');
       setShowAddModal(false);
       fetchLocations();
     } catch (err) {
-      alert('Lỗi tạo Tầng kho: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi tạo Tầng kho: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -119,11 +126,11 @@ const LocationManagement = () => {
     try {
       setSubmitting(true);
       await apiClient.patch(`/inventory/locations/${editingLoc.id}`, form);
-      alert('Đã cập nhật Tầng kho thành công!');
+      showAlert('Đã cập nhật Tầng kho thành công!');
       setEditingLoc(null);
       fetchLocations();
     } catch (err) {
-      alert('Lỗi cập nhật Tầng kho: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi cập nhật Tầng kho: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -134,11 +141,11 @@ const LocationManagement = () => {
     try {
       setSubmitting(true);
       await apiClient.delete(`/inventory/locations/${deletingLoc.id}`);
-      alert(`Đã xóa Tầng kho [${deletingLoc.code}] thành công!`);
+      showAlert(`Đã xóa Tầng kho [${deletingLoc.code}] thành công!`);
       setDeletingLoc(null);
       fetchLocations();
     } catch (err) {
-      alert('Lỗi xóa Tầng kho: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi xóa Tầng kho: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -243,6 +250,11 @@ const LocationManagement = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
+          {canCreate && (
+            <button className="btn btn-primary" onClick={handleOpenAdd} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> Thêm Tầng Kho
+            </button>
+          )}
           <button className="btn btn-outline" onClick={fetchLocations} style={{ background: 'var(--bg-glass)' }}>
             <RefreshCw size={16} /> Làm mới
           </button>
@@ -296,19 +308,19 @@ const LocationManagement = () => {
               <th>Mặt Hàng Lưu Trữ (Multi-SKU)</th>
               <th>Sức Chứa & Tải Trọng</th>
               <th>Trạng Thái Không Gian</th>
-              <th style={{ textAlign: 'center', width: '90px' }}>Thao Tác</th>
+              {(canUpdate || canDelete) && <th style={{ textAlign: 'center', width: '90px' }}>Thao Tác</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                <td colSpan={canUpdate || canDelete ? 7 : 6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
                   Đang tải danh mục Kệ & Tầng kho...
                 </td>
               </tr>
             ) : filteredLocations.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                <td colSpan={canUpdate || canDelete ? 7 : 6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
                   Không tìm thấy Tầng kho phù hợp.
                 </td>
               </tr>
@@ -336,8 +348,8 @@ const LocationManagement = () => {
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc' }}>Tầng {loc.shelfLevel || 1}</span>
-                        <code style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--accent-primary)', background: 'rgba(99, 102, 241, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>[{loc.code}]</code>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Tầng {loc.shelfLevel || 1}</span>
+                        <code style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--accent-primary)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '4px' }}>[{loc.code}]</code>
                       </div>
                       {loc.description && (
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
@@ -378,26 +390,43 @@ const LocationManagement = () => {
                         </span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                        <button
-                          className="btn btn-outline"
-                          style={{ padding: '5px 7px', fontSize: '0.75rem', background: 'transparent' }}
-                          onClick={() => handleOpenEdit(loc)}
-                          title="Sửa tầng"
-                        >
-                          <Edit2 size={14} color="var(--accent-primary)" />
-                        </button>
-                        <button
-                          className="btn btn-outline"
-                          style={{ padding: '5px 7px', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
-                          onClick={() => setDeletingLoc(loc)}
-                          title="Xóa tầng"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+                    {(canUpdate || canDelete) && (
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          {canUpdate && (
+                            <button
+                              className="btn btn-outline"
+                              style={{ padding: '5px 7px', fontSize: '0.75rem', background: 'transparent' }}
+                              onClick={() => handleOpenEdit(loc)}
+                              title="Sửa tầng"
+                            >
+                              <Edit2 size={14} color="var(--accent-primary)" />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              className="btn btn-outline"
+                              disabled={(loc.currentItemsCount || 0) > 0}
+                              style={{
+                                padding: '5px 7px',
+                                fontSize: '0.75rem',
+                                borderColor: (loc.currentItemsCount || 0) > 0 ? 'var(--border-color)' : 'var(--danger)',
+                                color: (loc.currentItemsCount || 0) > 0 ? 'var(--text-secondary)' : 'var(--danger)',
+                                background: 'transparent',
+                                opacity: (loc.currentItemsCount || 0) > 0 ? 0.45 : 1,
+                                cursor: (loc.currentItemsCount || 0) > 0 ? 'not-allowed' : 'pointer',
+                              }}
+                              onClick={() => {
+                                if ((loc.currentItemsCount || 0) === 0) setDeletingLoc(loc);
+                              }}
+                              title={(loc.currentItemsCount || 0) > 0 ? 'Không thể xóa tầng đang chứa hàng hóa' : 'Xóa tầng'}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })

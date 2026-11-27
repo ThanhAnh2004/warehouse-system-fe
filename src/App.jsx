@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { DialogProvider } from './context/DialogContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -23,63 +24,83 @@ import Procurement from './pages/Procurement';
 const App = () => {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
+      <DialogProvider>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
 
-          <Route element={<Layout />}>
-            {/* Dashboard / Trang chủ */}
-            <Route element={<ProtectedRoute requiredPermission="reports:read" allowedRoles={['Admin', 'Manager']} />}>
-              <Route path="/" element={<Dashboard />} />
+            <Route element={<Layout />}>
+              {/* Tổng Quan (Dashboard) */}
+              <Route element={<ProtectedRoute requiredPermission="dashboard:read" />}>
+                <Route path="/" element={<Dashboard />} />
+              </Route>
+
+              {/* Sơ đồ & Danh mục Kệ kho */}
+              <Route element={<ProtectedRoute requiredAnyPermissions={['locations:read', 'locations:allocate']} />}>
+                <Route path="/warehouse-map" element={<WarehouseMap />} />
+                <Route path="/warehouse_map" element={<WarehouseMap />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="locations:read" />}>
+                <Route path="/locations" element={<LocationManagement />} />
+              </Route>
+
+              {/* Báo cáo & Thống kê */}
+              <Route element={<ProtectedRoute requiredPermission="reports:read" />}>
+                <Route path="/reports" element={<Reports />} />
+              </Route>
+
+              {/* Cảnh báo kho hàng */}
+              <Route element={<ProtectedRoute requiredPermission="alerts:read" />}>
+                <Route path="/alerts" element={<Alerts />} />
+              </Route>
+
+              {/* Vận hành Kho hàng */}
+              <Route element={<ProtectedRoute requiredAnyPermissions={['stock:read', 'products:read']} />}>
+                <Route path="/inventory" element={<Inventory />} />
+                <Route path="/inventory/:sku" element={<ProductDetails />} />
+                <Route path="/products/:sku" element={<ProductDetails />} />
+              </Route>
+
+              <Route element={<ProtectedRoute requiredPermission="transactions:read" />}>
+                <Route path="/transactions" element={<Transactions />} />
+              </Route>
+
+              <Route element={<ProtectedRoute requiredPermission="adjustments:read" />}>
+                <Route path="/adjustments" element={<StockAdjustment />} />
+              </Route>
+
+              <Route element={<ProtectedRoute requiredPermission="orders:read" />}>
+                <Route path="/orders" element={<Orders />} />
+              </Route>
+
+              <Route element={<ProtectedRoute requiredPermission="procurement:read" />}>
+                <Route path="/procurement" element={<Procurement />} />
+              </Route>
+
+              {/* Trang cá nhân - Mọi tài khoản đã đăng nhập đều truy cập được */}
+              <Route element={<ProtectedRoute />}>
+                <Route path="/profile" element={<Profile />} />
+              </Route>
+
+              {/* Quản trị Hệ thống */}
+              <Route element={<ProtectedRoute requiredPermission="users:read" />}>
+                <Route path="/users" element={<UserManagement />} />
+              </Route>
+
+              <Route element={<ProtectedRoute requiredAnyPermissions={['roles:read', 'roles:manage']} />}>
+                <Route path="/role-management" element={<RoleManagement />} />
+              </Route>
+
+              <Route element={<ProtectedRoute requiredPermission="system:read" />}>
+                <Route path="/system-health" element={<SystemHealth />} />
+              </Route>
             </Route>
 
-            {/* Sơ đồ & Danh mục Kệ kho */}
-            <Route element={<ProtectedRoute requiredPermission="locations:read" allowedRoles={['Admin', 'Manager']} />}>
-              <Route path="/warehouse-map" element={<WarehouseMap />} />
-              <Route path="/warehouse_map" element={<WarehouseMap />} />
-              <Route path="/locations" element={<LocationManagement />} />
-            </Route>
-
-            {/* Báo cáo & Thống kê */}
-            <Route element={<ProtectedRoute requiredPermission="reports:read" allowedRoles={['Admin', 'Manager']} />}>
-              <Route path="/reports" element={<Reports />} />
-            </Route>
-
-            {/* Cảnh báo kho hàng */}
-            <Route element={<ProtectedRoute requiredPermission="alerts:read" allowedRoles={['Admin', 'Manager']} />}>
-              <Route path="/alerts" element={<Alerts />} />
-            </Route>
-
-            {/* Vận hành Kho hàng */}
-            <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']} />}>
-              <Route path="/inventory" element={<Inventory />} />
-              <Route path="/inventory/:sku" element={<ProductDetails />} />
-              <Route path="/products/:sku" element={<ProductDetails />} />
-              <Route path="/transactions" element={<Transactions />} />
-              <Route path="/adjustments" element={<StockAdjustment />} />
-              <Route path="/orders" element={<Orders />} />
-              <Route path="/procurement" element={<Procurement />} />
-              <Route path="/profile" element={<Profile />} />
-            </Route>
-
-            {/* Quản trị Hệ thống */}
-            <Route element={<ProtectedRoute requiredPermission="users:read" allowedRoles={['Admin']} />}>
-              <Route path="/users" element={<UserManagement />} />
-            </Route>
-
-            <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
-              <Route path="/role-management" element={<RoleManagement />} />
-            </Route>
-
-            <Route element={<ProtectedRoute requiredPermission="system:read" allowedRoles={['Admin']} />}>
-              <Route path="/system-health" element={<SystemHealth />} />
-            </Route>
-          </Route>
-
-          {/* Catch-all fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
+            {/* Catch-all fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Router>
+      </DialogProvider>
     </AuthProvider>
   );
 };

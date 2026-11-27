@@ -1,9 +1,9 @@
 import React, { useContext } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext, getLandingPath, isSystemAdminUser } from '../context/AuthContext';
 
-const ProtectedRoute = ({ allowedRoles, requiredPermission }) => {
-  const { user, loading, hasPermission } = useContext(AuthContext);
+const ProtectedRoute = ({ allowedRoles, requiredPermission, requiredAnyPermissions }) => {
+  const { user, loading, hasPermission, hasAnyPermission } = useContext(AuthContext);
 
   if (loading) {
     return (
@@ -18,18 +18,21 @@ const ProtectedRoute = ({ allowedRoles, requiredPermission }) => {
   }
 
   // Admin always has full access
-  if (user.role === 'Admin') {
+  if (isSystemAdminUser(user)) {
     return <Outlet />;
   }
 
-  // Check if role is in allowedRoles
-  const isRoleAllowed = !allowedRoles || allowedRoles.includes(user.role);
+  const fallback = getLandingPath(user);
 
-  // Check if user has required permission key
-  const isPermAllowed = requiredPermission ? hasPermission(requiredPermission) : true;
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to={fallback} replace />;
+  }
 
-  if (!isRoleAllowed && !isPermAllowed) {
-    const fallback = user.permissions?.includes('stock:read') ? '/inventory' : '/login';
+  if (requiredPermission && !hasPermission(requiredPermission)) {
+    return <Navigate to={fallback} replace />;
+  }
+
+  if (requiredAnyPermissions && !hasAnyPermission(requiredAnyPermissions)) {
     return <Navigate to={fallback} replace />;
   }
 

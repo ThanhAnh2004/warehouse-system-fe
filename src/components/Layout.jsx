@@ -41,10 +41,12 @@ const Layout = () => {
   };
 
   useEffect(() => {
-    if (user?.role === 'Admin' || user?.role === 'Manager') {
+    if (hasPermission('alerts:read')) {
       fetchNotifications();
       const interval = setInterval(fetchNotifications, 10000); // Poll every 10s
       return () => clearInterval(interval);
+    } else {
+      setNotifications([]);
     }
   }, [user]);
 
@@ -95,7 +97,7 @@ const Layout = () => {
         
         <nav className="sidebar-nav">
           {/* Nhóm 1: Tổng Quan */}
-          {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('reports:read')) && (
+          {hasPermission('dashboard:read') && (
             <>
               <div className="nav-section-title">Tổng Quan</div>
               <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -106,60 +108,75 @@ const Layout = () => {
           )}
 
           {/* Nhóm 2: Vận Hành Kho hàng */}
-          <div className="nav-section-title">Vận Hành Kho Hàng</div>
-          {(user?.role === 'Admin' || hasPermission('stock:read') || hasPermission('products:read')) && (
-            <NavLink to="/inventory" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Package size={20} />
-              <span>Quản lý Tồn kho</span>
-            </NavLink>
+          {(hasPermission('stock:read') ||
+            hasPermission('products:read') ||
+            hasPermission('transactions:read') ||
+            hasPermission('adjustments:read') ||
+            hasPermission('orders:read') ||
+            hasPermission('procurement:read')) && (
+            <>
+              <div className="nav-section-title">Vận Hành Kho Hàng</div>
+              {(hasPermission('stock:read') || hasPermission('products:read')) && (
+                <NavLink to="/inventory" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Package size={20} />
+                  <span>Quản lý Tồn kho</span>
+                </NavLink>
+              )}
+              {hasPermission('transactions:read') && (
+                <NavLink to="/transactions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <ArrowLeftRight size={20} />
+                  <span>Lịch sử Giao dịch</span>
+                </NavLink>
+              )}
+              {hasPermission('adjustments:read') && (
+                <NavLink to="/adjustments" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <ClipboardList size={20} />
+                  <span>Kiểm kê & Điều chỉnh</span>
+                </NavLink>
+              )}
+              {hasPermission('orders:read') && (
+                <NavLink to="/orders" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <ShoppingCart size={20} />
+                  <span>Quản lý Đơn hàng</span>
+                </NavLink>
+              )}
+              {hasPermission('procurement:read') && (
+                <NavLink to="/procurement" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Building2 size={20} />
+                  <span>Nhà cung cấp</span>
+                </NavLink>
+              )}
+            </>
           )}
-          {(user?.role === 'Admin' || hasPermission('transactions:read')) && (
-            <NavLink to="/transactions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <ArrowLeftRight size={20} />
-              <span>Lịch sử Giao dịch</span>
-            </NavLink>
-          )}
-          {(user?.role === 'Admin' || hasPermission('adjustments:read')) && (
-            <NavLink to="/adjustments" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <ClipboardList size={20} />
-              <span>Kiểm kê & Điều chỉnh</span>
-            </NavLink>
-          )}
-          <NavLink to="/orders" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <ShoppingCart size={20} />
-            <span>Quản lý Đơn hàng</span>
-          </NavLink>
-          <NavLink to="/procurement" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Building2 size={20} />
-            <span>Nhà cung cấp</span>
-          </NavLink>
 
           {/* Nhóm 3: Sơ Đồ & Vị Trí Kệ Kho */}
-          {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('locations:read') || hasPermission('locations:allocate')) && (
+          {(hasPermission('locations:read') || hasPermission('locations:allocate')) && (
             <>
               <div className="nav-section-title">Mặt Bằng, Kệ & Tầng Kho</div>
               <NavLink to="/warehouse-map" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <MapIcon size={20} />
                 <span>Sơ đồ Kệ kho</span>
               </NavLink>
-              <NavLink to="/locations" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Layers size={20} />
-                <span>Danh mục Kệ kho</span>
-              </NavLink>
+              {hasPermission('locations:read') && (
+                <NavLink to="/locations" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Layers size={20} />
+                  <span>Danh mục Kệ kho</span>
+                </NavLink>
+              )}
             </>
           )}
 
           {/* Nhóm 4: Thông Báo & Báo Cáo */}
-          {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('reports:read') || hasPermission('alerts:read')) && (
+          {(hasPermission('reports:read') || hasPermission('alerts:read')) && (
             <>
               <div className="nav-section-title">Thông Báo & Báo Cáo</div>
-              {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('reports:read')) && (
+              {hasPermission('reports:read') && (
                 <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <FileText size={20} />
                   <span>Báo cáo & Thống kê</span>
                 </NavLink>
               )}
-              {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('alerts:read')) && (
+              {hasPermission('alerts:read') && (
                 <NavLink to="/alerts" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Bell size={20} />
                   <span>Cảnh báo Kho hàng</span>
@@ -174,22 +191,22 @@ const Layout = () => {
           )}
 
           {/* Nhóm 5: Quản Trị Hệ Thống */}
-          {(user?.role === 'Admin' || hasPermission('users:read') || hasPermission('system:read')) && (
+          {(hasPermission('users:read') || hasPermission('roles:read') || hasPermission('roles:manage') || hasPermission('system:read')) && (
             <>
               <div className="nav-section-title">Quản Trị Hệ Thống</div>
-              {(user?.role === 'Admin' || hasPermission('users:read')) && (
+              {hasPermission('users:read') && (
                 <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Users size={20} />
                   <span>Quản lý Người dùng</span>
                 </NavLink>
               )}
-              {user?.role === 'Admin' && (
+              {(hasPermission('roles:manage') || hasPermission('roles:read')) && (
                 <NavLink to="/role-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Shield size={20} />
                   <span>Phân quyền Vai trò</span>
                 </NavLink>
               )}
-              {(user?.role === 'Admin' || hasPermission('system:read')) && (
+              {hasPermission('system:read') && (
                 <NavLink to="/system-health" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Activity size={20} />
                   <span>Giám sát Hệ thống</span>
@@ -260,7 +277,7 @@ const Layout = () => {
               {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
             </button>
 
-            {(user?.role === 'Admin' || user?.role === 'Manager') && (
+            {hasPermission('alerts:read') && (
               <div style={{ position: 'relative' }}>
                 <button 
                   onClick={() => setShowNotifications(!showNotifications)}
@@ -306,28 +323,30 @@ const Layout = () => {
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                                 {new Date(notif.createdAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}
                               </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteNotification(notif._id);
-                                }}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-secondary)',
-                                  padding: '2px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  borderRadius: '4px',
-                                  transition: 'color 0.2s, background-color 0.2s'
-                                }}
-                                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                              {hasPermission('alerts:manage') && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteNotification(notif._id);
+                                  }}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-secondary)',
+                                    padding: '2px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '4px',
+                                    transition: 'color 0.2s, background-color 0.2s'
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
                             </div>
                           </div>
                           <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>

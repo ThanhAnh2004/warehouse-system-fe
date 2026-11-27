@@ -4,6 +4,35 @@ import Cookies from 'js-cookie';
 
 export const AuthContext = createContext();
 
+export const isSystemAdminUser = (userData) => {
+  if (!userData) return false;
+  if (userData.isSystemAdmin) return true;
+  const normalized = (userData.role || '').trim().toLowerCase();
+  return normalized === 'admin' || normalized === 'quản trị viên';
+};
+
+export const getLandingPath = (userData) => {
+  if (!userData) return '/login';
+  if (isSystemAdminUser(userData)) return '/';
+  const perms = Array.isArray(userData.permissions) ? userData.permissions : [];
+  const hasAny = (keys) => keys.some((k) => perms.includes(k));
+
+  if (hasAny(['dashboard:read'])) return '/';
+  if (hasAny(['stock:read', 'products:read'])) return '/inventory';
+  if (hasAny(['orders:read'])) return '/orders';
+  if (hasAny(['procurement:read'])) return '/procurement';
+  if (hasAny(['locations:read', 'locations:allocate'])) return '/warehouse-map';
+  if (hasAny(['transactions:read'])) return '/transactions';
+  if (hasAny(['adjustments:read'])) return '/adjustments';
+  if (hasAny(['locations:read'])) return '/locations';
+  if (hasAny(['reports:read'])) return '/reports';
+  if (hasAny(['alerts:read'])) return '/alerts';
+  if (hasAny(['users:read'])) return '/users';
+  if (hasAny(['roles:read', 'roles:manage'])) return '/role-management';
+  if (hasAny(['system:read'])) return '/system-health';
+  return '/profile';
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -15,6 +44,7 @@ export const AuthProvider = ({ children }) => {
       email: payload.email, 
       id: payload.sub, 
       role: payload.role, 
+      isSystemAdmin: Boolean(payload.isSystemAdmin),
       permissions: payload.permissions || [],
       fullname: payload.fullname 
     };
@@ -35,6 +65,7 @@ export const AuthProvider = ({ children }) => {
               avatarUrl: res.data.avatarUrl || userData.avatarUrl,
               fullname: res.data.fullname || userData.fullname,
               role: res.data.role || userData.role,
+              isSystemAdmin: res.data.isSystemAdmin !== undefined ? Boolean(res.data.isSystemAdmin) : userData.isSystemAdmin,
               permissions: res.data.permissions || userData.permissions || [],
             };
             localStorage.setItem('user', JSON.stringify(updated));
@@ -82,6 +113,7 @@ export const AuthProvider = ({ children }) => {
                     fullname: res.data.fullname || parsedUser.fullname,
                     avatarUrl: res.data.avatarUrl || parsedUser.avatarUrl,
                     role: res.data.role || parsedUser.role,
+                    isSystemAdmin: res.data.isSystemAdmin !== undefined ? Boolean(res.data.isSystemAdmin) : parsedUser.isSystemAdmin,
                     permissions: res.data.permissions || parsedUser.permissions || [],
                   };
                   localStorage.setItem('user', JSON.stringify(updated));
@@ -163,16 +195,26 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const isSystemAdmin = isSystemAdminUser(user);
+
   const hasPermission = (permKey) => {
     if (!user) return false;
-    if (user.role === 'Admin') return true;
+    if (isSystemAdmin) return true;
     if (!permKey) return true;
     const perms = user.permissions || [];
     return perms.includes(permKey);
   };
 
+  const hasAnyPermission = (permKeys = []) => {
+    if (!user) return false;
+    if (isSystemAdmin) return true;
+    if (!permKeys || permKeys.length === 0) return true;
+    const perms = user.permissions || [];
+    return permKeys.some((k) => perms.includes(k));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, updateUser, hasPermission }}>
+    <AuthContext.Provider value={{ user, isSystemAdmin, login, logout, loading, updateUser, hasPermission, hasAnyPermission }}>
       {!loading && children}
     </AuthContext.Provider>
   );

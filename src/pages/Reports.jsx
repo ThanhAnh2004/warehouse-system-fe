@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { Download, Printer, Database, Package, ArrowUpRight, ArrowDownRight, Layers, AlertTriangle, TrendingUp, Calendar, DollarSign, Award, ShoppingBag, FileText } from 'lucide-react';
 import apiClient from '../api/client';
+import { AuthContext } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
 
 const ZONE_NAMES = {
@@ -13,6 +14,7 @@ const ZONE_NAMES = {
 const fmtVND = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(n || 0);
 
 const Reports = () => {
+  const { hasPermission } = useContext(AuthContext);
   const [reportData, setReportData] = useState(null);
   const [productsMap, setProductsMap] = useState({});
   const [productsList, setProductsList] = useState([]);
@@ -140,6 +142,7 @@ const Reports = () => {
 
   // Multi-Sheet Excel Export with formatted currency and auto column widths
   const exportMultiSheetExcel = () => {
+    const wb = XLSX.utils.book_new();
     const monthLabel = monthFilter === 'ALL'
       ? 'Toàn Thời Gian'
       : monthFilter.includes('-')
@@ -173,7 +176,9 @@ const Reports = () => {
       'Tổng Doanh Số Tương Ứng': fmtVND(p.revenue),
       'Số Lượng Tồn Hiện Tại': `${(p.quantity || 0).toLocaleString('vi-VN')} món`
     }));
-    const topQtySheet = XLSX.utils.json_to_sheet(topQtyRows);
+    const topQtySheet = XLSX.utils.json_to_sheet(
+      topQtyRows.length > 0 ? topQtyRows : [{ 'Thông báo': 'Chưa phát sinh dữ liệu xuất kho trong kỳ này' }]
+    );
     topQtySheet['!cols'] = [{ wch: 8 }, { wch: 20 }, { wch: 45 }, { wch: 24 }, { wch: 24 }, { wch: 22 }, { wch: 28 }, { wch: 22 }];
     XLSX.utils.book_append_sheet(wb, topQtySheet, 'Top_Ban_Chay_Thang');
 
@@ -188,7 +193,9 @@ const Reports = () => {
       'Doanh Số Xuất Kho': fmtVND(p.revenue),
       'Số Lượng Tồn Hiện Tại': `${(p.quantity || 0).toLocaleString('vi-VN')} món`
     }));
-    const topRevSheet = XLSX.utils.json_to_sheet(topRevRows);
+    const topRevSheet = XLSX.utils.json_to_sheet(
+      topRevRows.length > 0 ? topRevRows : [{ 'Thông báo': 'Chưa phát sinh dữ liệu xuất kho trong kỳ này' }]
+    );
     topRevSheet['!cols'] = [{ wch: 8 }, { wch: 20 }, { wch: 45 }, { wch: 24 }, { wch: 24 }, { wch: 22 }, { wch: 28 }, { wch: 22 }];
     XLSX.utils.book_append_sheet(wb, topRevSheet, 'Top_Doanh_So_Thang');
 
@@ -251,77 +258,79 @@ const Reports = () => {
             </select>
           </div>
 
-          <button onClick={exportMultiSheetExcel} className="btn btn-primary" style={{ display: 'flex', gap: '0.5rem', background: 'var(--success)' }}>
-            <Download size={18} /> Xuất File Excel
-          </button>
+          {hasPermission('reports:export') && (
+            <button onClick={exportMultiSheetExcel} className="btn btn-primary" style={{ display: 'flex', gap: '0.5rem', background: 'var(--success)' }}>
+              <Download size={18} /> Xuất File Excel
+            </button>
+          )}
         </div>
       </div>
 
       {/* KPI METRICS OVERVIEW BAR FOR SELECTED MONTH */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
-        <div className="glass-card flex justify-between items-center" style={{ padding: '1.25rem' }}>
-          <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+        <div className="glass-card flex justify-between items-center" style={{ padding: '1.25rem', gap: '0.75rem' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <p className="text-subtitle" style={{ marginBottom: '0.35rem', fontSize: '0.82rem' }}>Doanh Số Xuất Kho Trong Kỳ</p>
-            <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--accent-primary)', margin: 0 }}>
+            <h3 style={{ fontSize: 'clamp(1rem, 1.35vw, 1.25rem)', fontWeight: 700, color: 'var(--accent-primary)', margin: 0, wordBreak: 'break-word', lineHeight: 1.25 }}>
               {fmtVND(monthlyOutboundRevenue)}
             </h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tổng {monthlyOutboundQty} món xuất</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tổng {monthlyOutboundQty.toLocaleString('vi-VN')} món xuất</span>
           </div>
-          <div style={{ padding: '0.85rem', background: 'var(--accent-light)', color: 'var(--accent-primary)', borderRadius: '50%' }}>
-            <DollarSign size={24} />
+          <div style={{ padding: '0.8rem', background: 'var(--accent-light)', color: 'var(--accent-primary)', borderRadius: '50%', flexShrink: 0 }}>
+            <DollarSign size={22} />
           </div>
         </div>
 
-        <div className="glass-card flex justify-between items-center" style={{ padding: '1.25rem' }}>
-          <div>
+        <div className="glass-card flex justify-between items-center" style={{ padding: '1.25rem', gap: '0.75rem' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <p className="text-subtitle" style={{ marginBottom: '0.35rem', fontSize: '0.82rem' }}>Tổng Giá Trị Nhập Kho Trong Kỳ</p>
-            <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--success)', margin: 0 }}>
+            <h3 style={{ fontSize: 'clamp(1rem, 1.35vw, 1.25rem)', fontWeight: 700, color: 'var(--success)', margin: 0, wordBreak: 'break-word', lineHeight: 1.25 }}>
               {fmtVND(monthlyInboundValue)}
             </h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tổng {monthlyInboundQty} món nhập</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tổng {monthlyInboundQty.toLocaleString('vi-VN')} món nhập</span>
           </div>
-          <div style={{ padding: '0.85rem', background: 'var(--success-light)', color: 'var(--success)', borderRadius: '50%' }}>
-            <ArrowDownRight size={24} />
+          <div style={{ padding: '0.8rem', background: 'var(--success-light)', color: 'var(--success)', borderRadius: '50%', flexShrink: 0 }}>
+            <ArrowDownRight size={22} />
           </div>
         </div>
 
-        <div className="glass-card flex justify-between items-center" style={{ padding: '1.25rem' }}>
-          <div>
+        <div className="glass-card flex justify-between items-center" style={{ padding: '1.25rem', gap: '0.75rem' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <p className="text-subtitle" style={{ marginBottom: '0.35rem', fontSize: '0.82rem' }}>Tổng Giá Trị Tồn Kho Hiện Tại</p>
-            <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+            <h3 style={{ fontSize: 'clamp(1rem, 1.35vw, 1.25rem)', fontWeight: 700, color: 'var(--text-primary)', margin: 0, wordBreak: 'break-word', lineHeight: 1.25 }}>
               {fmtVND(reportData?.totalInventoryValue)}
             </h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{reportData?.totalStockQuantity || 0} món / {reportData?.totalProducts || 0} SKU</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{(reportData?.totalStockQuantity || 0).toLocaleString('vi-VN')} món / {reportData?.totalProducts || 0} SKU</span>
           </div>
-          <div style={{ padding: '0.85rem', background: 'rgba(99, 102, 241, 0.1)', color: 'rgb(99, 102, 241)', borderRadius: '50%' }}>
-            <Database size={24} />
+          <div style={{ padding: '0.8rem', background: 'rgba(99, 102, 241, 0.1)', color: 'rgb(99, 102, 241)', borderRadius: '50%', flexShrink: 0 }}>
+            <Database size={22} />
           </div>
         </div>
 
-        <div className="glass-card flex justify-between items-center" style={{ padding: '1.25rem' }}>
-          <div>
+        <div className="glass-card flex justify-between items-center" style={{ padding: '1.25rem', gap: '0.75rem' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <p className="text-subtitle" style={{ marginBottom: '0.35rem', fontSize: '0.82rem' }}>Sản Phẩm Cần Nhập Thêm</p>
-            <h3 style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--danger)', margin: 0 }}>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--danger)', margin: 0 }}>
               {reportData?.lowStock || 0} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>mặt hàng</span>
             </h3>
             <span style={{ fontSize: '0.75rem', color: 'var(--danger)', fontWeight: 600 }}>Cảnh báo dưới minStock</span>
           </div>
-          <div style={{ padding: '0.85rem', background: 'var(--danger-light)', color: 'var(--danger)', borderRadius: '50%' }}>
-            <AlertTriangle size={24} />
+          <div style={{ padding: '0.8rem', background: 'var(--danger-light)', color: 'var(--danger)', borderRadius: '50%', flexShrink: 0 }}>
+            <AlertTriangle size={22} />
           </div>
         </div>
       </div>
 
       {/* SECTION 1 & 2: TOP BÁN CHẠY NHẤT & TOP DOANH SỐ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
         {/* Table 1: Top Sản Phẩm Bán Chạy Nhất (Số lượng xuất) */}
-        <div className="glass-card" style={{ padding: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+        <div className="glass-card" style={{ padding: '1.5rem', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', gap: '0.75rem', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <Award size={22} color="var(--accent-primary)" />
-              <h2 className="text-title" style={{ fontSize: '1.15rem', margin: 0 }}>1. Top Sản Phẩm Bán Chạy Nhất Trong Kỳ</h2>
+              <h2 className="text-title" style={{ fontSize: '1.1rem', margin: 0 }}>1. Top Sản Phẩm Bán Chạy Nhất Trong Kỳ</h2>
             </div>
-            <span style={{ fontSize: '0.75rem', className: 'badge badge-primary', fontWeight: 600 }}>Theo Số Lượng Xuất</span>
+            <span className="badge badge-primary" style={{ fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Theo Số Lượng Xuất</span>
           </div>
 
           <div className="table-container" style={{ overflowX: 'auto' }}>
@@ -451,13 +460,13 @@ const Reports = () => {
                     <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</td>
                     <td><span className="badge badge-primary" style={{ fontSize: '0.75rem' }}>{p.category || 'Điện tử'}</span></td>
                     <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>{fmtVND(unitPrice)}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 700, fontSize: '0.8rem' }}>
-                        🔴 {curQty} món
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 700, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                        🔴 {curQty} {p.unit || 'món'}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'center', fontWeight: 600 }}>{minVal} món</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--warning)', fontSize: '0.9rem' }}>+{needVal} món</td>
+                    <td style={{ textAlign: 'center', fontWeight: 600, whiteSpace: 'nowrap' }}>{minVal} {p.unit || 'món'}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--warning)', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>+{needVal} {p.unit || 'món'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent-primary)' }}>{fmtVND(estCost)}</td>
                   </tr>
                 );
@@ -472,7 +481,7 @@ const Reports = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <Layers size={22} color="var(--accent-primary)" />
-            <h2 className="text-title" style={{ fontSize: '1.2rem', margin: 0 }}>4. Báo Cáo Phân Phối Sức Chứa & Lấp Đầy Tầng Kho (20 Tầng Kho)</h2>
+            <h2 className="text-title" style={{ fontSize: '1.2rem', margin: 0 }}>4. Báo Cáo Phân Phối Sức Chứa & Lấp Đầy Tầng Kho ({locations.length} Tầng Kho)</h2>
           </div>
         </div>
 
