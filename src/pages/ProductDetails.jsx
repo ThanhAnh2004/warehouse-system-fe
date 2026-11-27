@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
+import { useDialog } from '../context/DialogContext';
 import { AuthContext } from '../context/AuthContext';
 import { ArrowLeft, TrendingUp, PackageSearch, Tag, Edit2, Trash2, Save, X, Clock, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { calculateSuggestedMinStock } from '../utils/minStockCalculator';
@@ -27,9 +28,10 @@ const getImageUrl = (url) => {
 };
 
 const ProductDetails = () => {
+  const { showAlert, showConfirm } = useDialog();
   const { sku } = useParams();
   const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
+  const { user, hasPermission } = useContext(AuthContext);
   const [product, setProduct] = useState(null);
   const [stock, setStock] = useState(0);
   const [forecast, setForecast] = useState([]);
@@ -61,7 +63,7 @@ const ProductDetails = () => {
           : 0;
         setStock(totalStock);
 
-        if (user?.role !== 'Staff') {
+        if (hasPermission('forecast:read')) {
           try {
             const forecastRes = await apiClient.get(`/inventory/forecast/${prodData.id}`);
             if (forecastRes.data) {
@@ -129,24 +131,24 @@ const ProductDetails = () => {
       }
       fetchDetails();
       setIsEditing(false);
-      alert('Cập nhật thông tin sản phẩm thành công!');
+      showAlert('Cập nhật thông tin sản phẩm thành công!');
     } catch (e) {
       console.error(e);
-      alert('Cập nhật sản phẩm thất bại: ' + (e.response?.data?.message || e.message));
+      showAlert('Cập nhật sản phẩm thất bại: ' + (e.response?.data?.message || e.message));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này khỏi hệ thống?')) {
+    if ((await showConfirm('Bạn có chắc chắn muốn xóa sản phẩm này khỏi hệ thống?'))) {
       try {
         await apiClient.delete(`/inventory/products/${sku}`);
-        alert('Đã xóa sản phẩm thành công!');
+        showAlert('Đã xóa sản phẩm thành công!');
         navigate('/inventory');
       } catch (e) {
         console.error(e);
-        alert('Xóa sản phẩm thất bại: ' + (e.response?.data?.message || e.message));
+        showAlert('Xóa sản phẩm thất bại: ' + (e.response?.data?.message || e.message));
       }
     }
   };
@@ -163,17 +165,24 @@ const ProductDetails = () => {
         <h2 className="text-title" style={{ margin: 0 }}>Chi Tiết Sản Phẩm: {product.name}</h2>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: user?.role !== 'Staff' ? '1fr 2fr' : '1fr', gap: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: hasPermission('forecast:read') ? '1fr 2fr' : '1fr', gap: '2rem' }}>
         {/* Left Column: Product Info & Edit Form */}
         <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: 'fit-content', padding: '1.75rem', borderRadius: '16px' }}>
           <div style={{ textAlign: 'center', padding: '1rem', background: 'var(--bg-glass, rgba(255, 255, 255, 0.05))', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
             {getImageUrl(product.imageUrl) ? (
-              <img src={getImageUrl(product.imageUrl)} alt={product.name} style={{ width: '100%', maxWidth: '220px', maxHeight: '220px', borderRadius: '12px', objectFit: 'cover', margin: '0 auto', display: 'block' }} />
-            ) : (
-              <div style={{ width: '100%', height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                <PackageSearch size={54} />
-              </div>
-            )}
+              <img
+                src={getImageUrl(product.imageUrl)}
+                alt={product.name}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'flex';
+                }}
+                style={{ width: '100%', maxWidth: '220px', maxHeight: '220px', borderRadius: '12px', objectFit: 'cover', margin: '0 auto', display: 'block' }}
+              />
+            ) : null}
+            <div style={{ width: '100%', height: '180px', display: getImageUrl(product.imageUrl) ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+              <PackageSearch size={54} />
+            </div>
           </div>
 
           <div>
@@ -351,18 +360,22 @@ const ProductDetails = () => {
                   </div>
                 )}
 
-                {user?.role !== 'Staff' && (
+                {(hasPermission('products:update') || hasPermission('products:delete')) && (
                   <div style={{ display: 'flex', gap: '0.75rem', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                    <button className="btn btn-primary" style={{ flex: 1, gap: '6px', justifyContent: 'center' }} onClick={startEditing}>
-                      <Edit2 size={16} /> Chỉnh Sửa
-                    </button>
-                    <button 
-                      className="btn" 
-                      style={{ flex: 1, background: '#ef4444', color: '#ffffff', border: 'none', gap: '6px', justifyContent: 'center', fontWeight: 600 }}
-                      onClick={handleDelete}
-                    >
-                      <Trash2 size={16} /> Xóa
-                    </button>
+                    {hasPermission('products:update') && (
+                      <button className="btn btn-primary" style={{ flex: 1, gap: '6px', justifyContent: 'center' }} onClick={startEditing}>
+                        <Edit2 size={16} /> Chỉnh Sửa
+                      </button>
+                    )}
+                    {hasPermission('products:delete') && (
+                      <button 
+                        className="btn" 
+                        style={{ flex: 1, background: '#ef4444', color: '#ffffff', border: 'none', gap: '6px', justifyContent: 'center', fontWeight: 600 }}
+                        onClick={handleDelete}
+                      >
+                        <Trash2 size={16} /> Xóa
+                      </button>
+                    )}
                   </div>
                 )}
               </>
@@ -371,7 +384,7 @@ const ProductDetails = () => {
         </div>
 
         {/* Right Column: Analytics & Forecast */}
-        {user?.role !== 'Staff' && (
+        {hasPermission('forecast:read') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             <EoqCard product={product} currentStock={stock} forecast={forecast} forecastMeta={forecastMeta} />
 

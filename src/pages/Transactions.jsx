@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
+import { useDialog } from '../context/DialogContext';
+import { AuthContext } from '../context/AuthContext';
 import {
   Plus, Search, Download, Calendar, ChevronDown, ChevronUp, ChevronRight,
   FileText, ArrowRight, ArrowDownCircle, ArrowUpCircle, Repeat, SlidersHorizontal, Info, X,
@@ -19,9 +21,9 @@ const TX_TYPES = [
 const fmtVND = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n || 0);
 
 const Transactions = () => {
+  const { showAlert, showConfirm } = useDialog();
+  const { hasPermission } = useContext(AuthContext);
   const [productMap, setProductMap] = useState({});
-  const [products, setProducts] = useState([]);
-  const [warehouseLocations, setWarehouseLocations] = useState([]);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('DESC');
@@ -29,7 +31,6 @@ const Transactions = () => {
   const [endDate, setEndDate] = useState('');
   const [datePreset, setDatePreset] = useState('ALL');
   const [expandedTxId, setExpandedTxId] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   // Saga Inspection Modal State
   const [selectedSaga, setSelectedSaga] = useState(null);
@@ -54,7 +55,6 @@ const Transactions = () => {
     };
   }, [sagaModalOpen]);
 
-  const isMobile = window.innerWidth <= 768;
   const modalBackdropStyle = {
     position: 'fixed',
     top: 0,
@@ -77,17 +77,7 @@ const Transactions = () => {
 
   useEffect(() => {
     fetchProducts();
-    fetchLocations();
   }, []);
-
-  const fetchLocations = async () => {
-    try {
-      const res = await apiClient.get('/inventory/locations');
-      setWarehouseLocations(res.data || []);
-    } catch (err) {
-      console.error('Failed to fetch locations:', err);
-    }
-  };
 
   const fetchProducts = async () => {
     try {
@@ -95,11 +85,9 @@ const Transactions = () => {
       const map = {};
       const list = prodRes.data?.data || [];
       list.forEach(p => {
-        map[p.id] = { name: p.name, sku: p.sku, price: parseFloat(p.price) || 0 };
+        map[p.id] = { name: p.name, sku: p.sku, unit: p.unit || 'món', price: parseFloat(p.price) || 0 };
       });
       setProductMap(map);
-      setProducts(list);
-      
     } catch (err) {
       console.error(err);
     }
@@ -137,21 +125,23 @@ const Transactions = () => {
       });
       const list = res.data?.data || [];
       if (list.length === 0) {
-        alert('Không tìm thấy giao dịch nào để xuất CSV.');
+        showAlert('Không tìm thấy giao dịch nào để xuất CSV.');
         return;
       }
 
       const headers = ['Mã Giao Dịch', 'Loại Giao Dịch', 'Tên Sản Phẩm', 'Mã SKU', 'Số Lượng', 'Đơn Giá (VNĐ)', 'Tổng Giá Trị (VNĐ)', 'Trạng Thái', 'Thời Gian', 'Ghi Chú'];
       const rows = list.map(t => {
         const prod = productMap[t.productId];
-        const unitPrice = prod?.price || 0;
+        const unitPrice = (t.unitPrice && Number(t.unitPrice) > 0) ? Number(t.unitPrice) : (prod?.price || 0);
+        const prodName = t.productName || prod?.name || 'Không xác định';
+        const prodSku = t.productSku || prod?.sku || '';
         const totalVal = Math.abs(t.quantity * unitPrice);
         const dateStr = new Date(t.createdAt).toLocaleString('vi-VN');
         return [
           `"${t.id}"`,
           `"${t.type}"`,
-          `"${(prod?.name || 'Không xác định').replace(/"/g, '""')}"`,
-          `"${(prod?.sku || '').replace(/"/g, '""')}"`,
+          `"${prodName.replace(/"/g, '""')}"`,
+          `"${prodSku.replace(/"/g, '""')}"`,
           t.quantity,
           unitPrice,
           totalVal,
@@ -170,7 +160,7 @@ const Transactions = () => {
       link.click();
       document.body.removeChild(link);
     } catch (err) {
-      alert('Xuất file CSV thất bại: ' + err.message);
+      showAlert('Xuất file CSV thất bại: ' + err.message);
     }
   };
 
@@ -209,7 +199,7 @@ const Transactions = () => {
       }
     };
     fetchCounts();
-  }, [search, startDate, endDate, refreshKey]);
+  }, [search, startDate, endDate]);
 
   const fetchGroup = async (type, page = 1) => {
     setGroups(prev => ({ ...prev, [type]: { ...(prev[type] || {}), loading: true } }));
@@ -237,7 +227,7 @@ const Transactions = () => {
     Object.keys(expanded).forEach(type => {
       if (expanded[type]) fetchGroup(type, 1);
     });
-  }, [search, sortBy, sortOrder, startDate, endDate, refreshKey]);
+  }, [search, sortBy, sortOrder, startDate, endDate]);
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -260,10 +250,12 @@ const Transactions = () => {
             Sổ cái kiểm toán biến động kho tự động (Audit Ledger). Ghi nhận tự động từ đơn Thu Mua (Cửa 01) &amp; đơn Xuất Hàng (Cửa 02).
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="btn btn-outline" onClick={handleExportCSV} style={{ background: 'var(--bg-glass)' }}>
-            <Download size={18} /> Xuất Báo Cáo CSV
-          </button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {(hasPermission('transactions:export') || hasPermission('reports:export')) && (
+            <button className="btn btn-outline" onClick={handleExportCSV} style={{ background: 'var(--bg-glass)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Download size={18} /> Xuất Báo Cáo CSV
+            </button>
+          )}
         </div>
       </div>
 
@@ -286,7 +278,19 @@ const Transactions = () => {
             Phạm Vi Thời Gian
           </div>
           <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-primary)', marginTop: '0.4rem' }}>
-            {datePreset === 'ALL' ? 'Toàn bộ lịch sử' : datePreset === 'CUSTOM' ? 'Tùy chọn khoảng ngày' : datePreset}
+            {datePreset === 'ALL'
+              ? 'Toàn bộ lịch sử'
+              : datePreset === 'TODAY'
+              ? 'Hôm nay'
+              : datePreset === '7DAYS'
+              ? '7 ngày gần nhất'
+              : datePreset === '30DAYS'
+              ? '30 ngày gần nhất'
+              : datePreset === 'MONTH'
+              ? 'Tháng này'
+              : datePreset === 'CUSTOM'
+              ? 'Tùy chọn khoảng ngày'
+              : datePreset}
           </div>
         </div>
       </div>
@@ -411,7 +415,10 @@ const Transactions = () => {
                           ) : (group.data || []).map((tx, index) => {
                             const isExpanded = expandedTxId === tx.id;
                             const prod = productMap[tx.productId];
-                            const unitPrice = prod?.price || 0;
+                            const displayName = tx.productName || prod?.name || tx.productId;
+                            const displaySku = tx.productSku || prod?.sku || tx.productId;
+                            const displayUnit = tx.productUnit || prod?.unit || 'món';
+                            const unitPrice = (tx.unitPrice && Number(tx.unitPrice) > 0) ? Number(tx.unitPrice) : (prod?.price || 0);
                             const totalValue = Math.abs(tx.quantity * unitPrice);
 
                             return (
@@ -427,17 +434,17 @@ const Transactions = () => {
                                     {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                   </td>
                                   <td style={{ fontWeight: 600 }}>
-                                    {prod ? prod.name : tx.productId}
+                                    {displayName}
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginTop: '2px' }}>
-                                      SKU: {prod ? prod.sku : tx.productId}
+                                      SKU: {displaySku}
                                     </div>
                                   </td>
-                                  <td style={{ fontWeight: 700 }}>{tx.quantity}</td>
+                                  <td style={{ fontWeight: 700 }}>{tx.quantity} {displayUnit}</td>
                                   <td>
-                                    {prod ? (
+                                    {unitPrice > 0 ? (
                                       <>
                                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{fmtVND(totalValue)}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{fmtVND(unitPrice)}/món</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{fmtVND(unitPrice)}/{displayUnit}</div>
                                       </>
                                     ) : '-'}
                                   </td>
@@ -476,7 +483,11 @@ const Transactions = () => {
                                               <span style={{ color: '#10b981' }}>🟢 Nhập kho tổng</span>
                                             ) : (
                                               <>
-                                                <span>Từ Kệ {tx.locationFrom}</span>
+                                                <span>
+                                                  {tx.locationFrom === 'DEFAULT_WAREHOUSE'
+                                                    ? 'Từ Hàng chờ phân kệ'
+                                                    : `Từ Kệ ${tx.locationFrom}`}
+                                                </span>
                                                 <ArrowRight size={14} color="var(--accent-primary)" />
                                                 <span>Đến Kệ {tx.locationTo}</span>
                                               </>
@@ -518,7 +529,7 @@ const Transactions = () => {
                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              alert(`In phiếu giao dịch:\nMã ID: ${tx.id}\nSản phẩm: ${prod?.name}\nSố lượng: ${tx.quantity}\nThời gian: ${new Date(tx.createdAt).toLocaleString('vi-VN')}`);
+                                              showAlert(`In phiếu giao dịch:\nMã ID: ${tx.id}\nSản phẩm: ${displayName}\nSố lượng: ${tx.quantity} ${displayUnit}\nThời gian: ${new Date(tx.createdAt).toLocaleString('vi-VN')}`);
                                             }}
                                           >
                                             <FileText size={14} /> In Phiếu Giao Dịch

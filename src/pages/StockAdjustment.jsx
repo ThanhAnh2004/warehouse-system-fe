@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import apiClient from '../api/client';
+import { AuthContext } from '../context/AuthContext';
+import { useDialog } from '../context/DialogContext';
 import { ClipboardList, AlertTriangle, Send, PackageMinus, PackagePlus, Edit2, Trash2, X, Save, Calendar } from 'lucide-react';
 
 const ADJUSTMENT_TYPES = [
@@ -20,6 +22,11 @@ const DATE_PRESETS = [
 ];
 
 const StockAdjustment = () => {
+  const { hasPermission } = useContext(AuthContext);
+  const { showAlert, showConfirm } = useDialog();
+  const canCreate = hasPermission('adjustments:create');
+  const canUpdate = hasPermission('adjustments:update');
+  const canDelete = hasPermission('adjustments:delete');
   const [products, setProducts] = useState([]);
   const [productMap, setProductMap] = useState({});
   const [recent, setRecent] = useState([]);
@@ -99,7 +106,7 @@ const StockAdjustment = () => {
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
-      const res = await apiClient.get('/transactions', { params });
+      const res = await apiClient.get('/transactions/adjustments', { params });
       setRecent(res.data?.data || []);
     } catch (err) {
       console.error('Failed to fetch recent adjustments:', err);
@@ -146,7 +153,7 @@ const StockAdjustment = () => {
 
     try {
       setSubmitting(true);
-      await apiClient.post('/transactions', payload);
+      await apiClient.post('/transactions/adjustments', payload);
       setMessage({ type: 'success', text: `Đã ghi nhận điều chỉnh kiểm kê: ${adjType.label} (${isIncrease ? '+' : '-'}${qty}).` });
       setForm((f) => ({ ...f, quantity: 1, reason: '' }));
       fetchRecent(datePreset);
@@ -170,11 +177,11 @@ const StockAdjustment = () => {
     if (!editingTx) return;
     const isPositive = editingTx.quantity > 0;
     const qty = parseInt(editForm.quantity, 10);
-    if (isNaN(qty) || qty <= 0) return alert('Số lượng phải lớn hơn 0!');
+    if (isNaN(qty) || qty <= 0) return showAlert('Số lượng phải lớn hơn 0!');
 
     try {
       setSubmitting(true);
-      await apiClient.patch(`/transactions/${editingTx.id}`, {
+      await apiClient.patch(`/transactions/adjustments/${editingTx.id}`, {
         quantity: isPositive ? qty : -qty,
         note: editForm.note.trim(),
       });
@@ -182,7 +189,7 @@ const StockAdjustment = () => {
       setEditingTx(null);
       fetchRecent(datePreset);
     } catch (err) {
-      alert('Lỗi cập nhật: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi cập nhật: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -192,12 +199,12 @@ const StockAdjustment = () => {
     if (!deletingTx) return;
     try {
       setDeletingLoading(true);
-      await apiClient.delete(`/transactions/${deletingTx.id}`);
+      await apiClient.delete(`/transactions/adjustments/${deletingTx.id}`);
       setMessage({ type: 'success', text: 'Đã xóa báo cáo điều chỉnh thành công.' });
       setDeletingTx(null);
       fetchRecent(datePreset);
     } catch (err) {
-      alert('Lỗi xóa báo cáo: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi xóa báo cáo: ' + (err.response?.data?.message || err.message));
     } finally {
       setDeletingLoading(false);
     }
@@ -229,8 +236,9 @@ const StockAdjustment = () => {
         <h1 className="text-title" style={{ marginBottom: 0 }}>Kiểm Kê Kho & Báo Cáo Sự Cố</h1>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) 1fr', gap: '2rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: canCreate ? 'minmax(320px, 420px) 1fr' : '1fr', gap: '2rem', alignItems: 'start' }}>
         {/* Form */}
+        {canCreate && (
         <div className="glass-card">
           <h3 className="text-subtitle" style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1.25rem' }}>Báo cáo Sự cố / Kiểm kê</h3>
 
@@ -301,6 +309,7 @@ const StockAdjustment = () => {
             </button>
           </form>
         </div>
+        )}
 
         {/* Recent adjustments */}
         <div className="glass-card">
@@ -383,15 +392,15 @@ const StockAdjustment = () => {
                   <th style={{ textAlign: 'right' }}>Số Lượng</th>
                   <th>Lý Do / Ghi Chú</th>
                   <th>Thời Gian</th>
-                  <th style={{ textAlign: 'center', width: '90px' }}>Thao Tác</th>
+                  {(canUpdate || canDelete) && <th style={{ textAlign: 'center', width: '90px' }}>Thao Tác</th>}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Đang tải...</td></tr>
+                  <tr><td colSpan={canUpdate || canDelete ? 7 : 6} style={{ textAlign: 'center', padding: '2rem' }}>Đang tải...</td></tr>
                 ) : recent.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-secondary)' }}>
+                    <td colSpan={canUpdate || canDelete ? 7 : 6} style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-secondary)' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                         <ClipboardList size={30} style={{ opacity: 0.35 }} />
                         <span>
@@ -418,34 +427,40 @@ const StockAdjustment = () => {
                         </span>
                       </td>
                       <td style={{ fontWeight: 600 }}>
-                        {productMap[t.productId]?.name || t.productId}
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>{productMap[t.productId]?.sku || ''}</div>
+                        {t.productName || productMap[t.productId]?.name || t.productId}
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>{t.productSku || productMap[t.productId]?.sku || ''}</div>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: isPositive ? 'var(--success)' : 'var(--danger)' }}>
                         {isPositive ? '+' : ''}{t.quantity}
                       </td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{reason}</td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{new Date(t.createdAt).toLocaleString('vi-VN')}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button
-                            className="btn btn-outline"
-                            style={{ padding: '5px 7px', fontSize: '0.75rem', background: 'transparent' }}
-                            onClick={() => handleOpenEdit(t)}
-                            title="Sửa báo cáo"
-                          >
-                            <Edit2 size={14} color="var(--accent-primary)" />
-                          </button>
-                          <button
-                            className="btn btn-outline"
-                            style={{ padding: '5px 7px', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
-                            onClick={() => setDeletingTx(t)}
-                            title="Xóa báo cáo"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
+                      {(canUpdate || canDelete) && (
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                            {canUpdate && (
+                              <button
+                                className="btn btn-outline"
+                                style={{ padding: '5px 7px', fontSize: '0.75rem', background: 'transparent' }}
+                                onClick={() => handleOpenEdit(t)}
+                                title="Sửa báo cáo"
+                              >
+                                <Edit2 size={14} color="var(--accent-primary)" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                className="btn btn-outline"
+                                style={{ padding: '5px 7px', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
+                                onClick={() => setDeletingTx(t)}
+                                title="Xóa báo cáo"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

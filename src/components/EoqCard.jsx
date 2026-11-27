@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import { 
   Calculator, 
   Settings2, 
@@ -17,6 +18,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import apiClient from '../api/client';
+import { useDialog } from '../context/DialogContext';
+import CreatePurchaseOrderModal from './CreatePurchaseOrderModal';
 
 const fmtVND = (n) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(n || 0);
@@ -28,6 +31,8 @@ const SERVICE_LEVEL_OPTIONS = [
 ];
 
 const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta }) => {
+  const { hasPermission } = useContext(AuthContext);
+  const { showAlert, showConfirm } = useDialog();
   // Configurable parameters
   const [orderingCost, setOrderingCost] = useState(50000); // S (VNĐ/đơn)
   const [holdingRatePct, setHoldingRatePct] = useState(20); // H (% đơn giá/năm)
@@ -35,7 +40,7 @@ const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta })
   const [serviceLevel, setServiceLevel] = useState(0.95); // Z-score
   const [showSettings, setShowSettings] = useState(false);
   const [showFormulaModal, setShowFormulaModal] = useState(false);
-  const [isOrdering, setIsOrdering] = useState(false);
+  const [showReorderModal, setShowReorderModal] = useState(false);
   const [orderSuccessMsg, setOrderSuccessMsg] = useState('');
   const [isSyncingMin, setIsSyncingMin] = useState(false);
   const [syncMinMsg, setSyncMinMsg] = useState('');
@@ -135,26 +140,10 @@ const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta })
     recommendedQty = 0;
   }
 
-  // Xử lý xác nhận tạo đề xuất bổ sung hàng
-  const handleConfirmReplenishment = async () => {
-    if (!product?.id || recommendedQty <= 0) return;
-    setIsOrdering(true);
-    try {
-      // Ghi nhận giao dịch INBOUND dạng PENDING vào Transaction Service
-      await apiClient.post('/transactions', {
-        productId: product.id,
-        type: 'INBOUND',
-        quantity: recommendedQty,
-        note: `[Hệ Thống Ra Quyết Định Đề Xuất] Nhập bổ sung ${recommendedQty} món theo mô hình EOQ (ROP=${reorderPoint}, Tồn=${currentStock})`,
-      });
-      setOrderSuccessMsg(`Đã tạo thành công Đề xuất Nhập hàng ${recommendedQty} ${product.unit || 'sản phẩm'} vào danh sách giao dịch!`);
-      setTimeout(() => setOrderSuccessMsg(''), 6000);
-    } catch (err) {
-      console.error('Lỗi khi tạo đề xuất bổ sung:', err);
-      alert('Không thể tạo đề xuất bổ sung hàng: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setIsOrdering(false);
-    }
+  // Mở form tạo đơn đặt hàng bổ sung từ nhà cung cấp (tùy chỉnh NCC, số lượng, giá sỉ, nhiều mặt hàng)
+  const handleConfirmReplenishment = () => {
+    if (!product?.id) return;
+    setShowReorderModal(true);
   };
 
   // Đồng bộ ngưỡng Min Stock bằng ROP của AI
@@ -172,7 +161,7 @@ const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta })
       }
     } catch (err) {
       console.error('Lỗi khi đồng bộ Min:', err);
-      alert('Không thể cập nhật Min Stock: ' + (err.response?.data?.message || err.message));
+      showAlert('Không thể cập nhật Min Stock: ' + (err.response?.data?.message || err.message));
     } finally {
       setIsSyncingMin(false);
     }
@@ -325,12 +314,12 @@ const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta })
         </div>
 
         {/* Action Button: Replenish recommendation */}
-        {isReorderNeeded && (
+        {isReorderNeeded && hasPermission('procurement:create') && (
           <div>
             <button
+              type="button"
               className="btn btn-primary"
               onClick={handleConfirmReplenishment}
-              disabled={isOrdering}
               style={{
                 background: badgeColor,
                 borderColor: badgeColor,
@@ -343,7 +332,7 @@ const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta })
               }}
             >
               <ShoppingCart size={16} />
-              {isOrdering ? 'Đang tạo đề xuất...' : `Đặt bổ sung ngay (${recommendedQty} món)`}
+              {`Đặt bổ sung ngay (${recommendedQty} ${product?.unit || 'món'})`}
             </button>
           </div>
         )}
@@ -388,7 +377,7 @@ const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta })
             ) : (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
                 <span>Lead-time: {leadTimeDemand.toFixed(1)}</span>
-                {product?.minStockLevel !== reorderPoint && (
+                {product?.minStockLevel !== reorderPoint && hasPermission('products:update') && (
                   <button
                     type="button"
                     onClick={handleSyncMinWithRop}
@@ -678,6 +667,30 @@ const EoqCard = ({ product, currentStock: passedStock, forecast, forecastMeta })
           </div>
         </div>
       )}
+
+      <CreatePurchaseOrderModal
+        isOpen={showReorderModal}
+        onClose={() => setShowReorderModal(false)}
+        title="Đặt Bổ Sung Hàng Từ Nhà Cung Cấp"
+        subtitle={
+          <>
+            Lập phiếu đặt hàng bổ sung theo mô hình tồn kho chuyển về{' '}
+            <strong>CỬA 01 - IN (CẢNG TIẾP NHẬN A)</strong>
+          </>
+        }
+        submitLabel="Tạo đơn đặt hàng mới"
+        initialProductId={product?.id || ''}
+        initialProduct={product}
+        initialQuantity={recommendedQty || 10}
+        initialNotes={`[Đề xuất tồn kho] Đặt bổ sung ${product?.name || ''} (SKU: ${product?.sku || ''}), tồn hiện tại: ${currentStock}`}
+        onSuccess={(createdPO) => {
+          const poCode = createdPO?.poNumber ? ` (${createdPO.poNumber})` : '';
+          setOrderSuccessMsg(
+            `Đã tạo thành công Đơn đặt hàng bổ sung${poCode} từ nhà cung cấp! Vào mục Nhà cung cấp để duyệt và tiếp nhận qua CỬA 01 - IN.`,
+          );
+          setTimeout(() => setOrderSuccessMsg(''), 8000);
+        }}
+      />
     </div>
   );
 };

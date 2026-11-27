@@ -2,7 +2,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
-import { AuthContext } from '../context/AuthContext';
+import { useDialog } from '../context/DialogContext';
+import { AuthContext, isSystemAdminUser } from '../context/AuthContext';
 import { Plus, Search, Image as ImageIcon, Tag, Filter, X, Save, Eye, Sparkles } from 'lucide-react';
 import { calculateSuggestedMinStock } from '../utils/minStockCalculator';
 import './Inventory.css';
@@ -28,6 +29,7 @@ const getImageUrl = (url) => {
 };
 
 const Inventory = () => {
+  const { showAlert, showConfirm } = useDialog();
   const navigate = useNavigate();
   const { user, hasPermission } = useContext(AuthContext);
   const [products, setProducts] = useState([]);
@@ -42,6 +44,12 @@ const Inventory = () => {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
+  const [suppliers, setSuppliers] = useState([]);
+  const canAssignSupplier =
+    isSystemAdminUser(user) ||
+    hasPermission('procurement:create') ||
+    hasPermission('products:create') ||
+    hasPermission('products:update');
   const [newProduct, setNewProduct] = useState({
     name: '',
     sku: '',
@@ -51,7 +59,9 @@ const Inventory = () => {
     description: '',
     minStockLevel: 20,
     unit: 'Bộ',
-    image: null
+    image: null,
+    supplierId: '',
+    supplyPrice: ''
   });
 
   const [minRationale, setMinRationale] = useState('');
@@ -68,6 +78,12 @@ const Inventory = () => {
   useEffect(() => {
     if (showModal) {
       document.body.style.overflow = 'hidden';
+      if (canAssignSupplier) {
+        apiClient
+          .get('/procurement/suppliers')
+          .then((res) => setSuppliers(res.data || []))
+          .catch(() => {});
+      }
     } else {
       document.body.style.overflow = 'auto';
     }
@@ -128,14 +144,34 @@ const Inventory = () => {
 
     try {
       setSubmitting(true);
-      await apiClient.post('/inventory/products', formData, {
+      const res = await apiClient.post('/inventory/products', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      const created = res.data;
+      if (newProduct.supplierId && created?.id) {
+        try {
+          await apiClient.post(`/procurement/suppliers/${newProduct.supplierId}/products`, {
+            productId: created.id,
+            productSku: created.sku || newProduct.sku,
+            productName: created.name || newProduct.name,
+            supplyPrice: newProduct.supplyPrice
+              ? Number(newProduct.supplyPrice)
+              : Math.round(Number(newProduct.price || 0) * 0.75)
+          });
+        } catch (supErr) {
+          showAlert(
+            `Đã tạo sản phẩm ${created.sku}, nhưng chưa gán được nhà cung cấp: ` +
+              (supErr.response?.data?.message || supErr.message),
+            'warning',
+            'Lưu Ý Nhà Cung Cấp'
+          );
+        }
+      }
       setShowModal(false);
-      setNewProduct({ name: '', sku: '', price: '', quantity: 0, category: 'Điện thoại & Tablet', unit: 'Bộ', description: '', minStockLevel: 20, image: null });
+      setNewProduct({ name: '', sku: '', price: '', quantity: 0, category: 'Điện thoại & Tablet', unit: 'Bộ', description: '', minStockLevel: 20, image: null, supplierId: '', supplyPrice: '' });
       fetchProducts();
     } catch (err) {
-      alert('Lỗi tạo sản phẩm: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi tạo sản phẩm: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -165,8 +201,8 @@ const Inventory = () => {
   return (
     <div className="animate-slide-up">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <h2 className="text-title" style={{ marginBottom: 0 }}>Quản Lý Tồn Kho (Inventory Service)</h2>
-        {(user?.role === 'Admin' || user?.role === 'Manager' || hasPermission('products:create')) && (
+        <h2 className="text-title" style={{ marginBottom: 0 }}>Quản Lý Tồn Kho</h2>
+        {hasPermission('products:create') && (
           <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Plus size={18} /> Khai Báo Mã Sản Phẩm Mới
           </button>
@@ -174,24 +210,35 @@ const Inventory = () => {
       </div>
 
       <div className="glass-card mb-4" style={{ padding: '1rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
-          {CATEGORY_CONFIG.map(cat => (
-            <button
-              key={cat.key}
-              className={`btn ${selectedCategory === cat.key ? 'btn-primary' : 'btn-outline'}`}
-              style={{
-                fontSize: '0.85rem',
-                padding: '0.4rem 0.8rem',
-                whiteSpace: 'nowrap',
-                background: selectedCategory === cat.key ? cat.color : 'transparent',
-                borderColor: cat.color,
-                color: selectedCategory === cat.key ? '#fff' : cat.color
-              }}
-              onClick={() => { setSelectedCategory(cat.key); setPage(1); }}
-            >
-              {cat.label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+          {CATEGORY_CONFIG.map(cat => {
+            const isSelected = selectedCategory === cat.key;
+            return (
+              <button
+                key={cat.key}
+                type="button"
+                style={{
+                  fontSize: '0.85rem',
+                  padding: '0.45rem 0.95rem',
+                  whiteSpace: 'nowrap',
+                  borderRadius: '10px',
+                  border: isSelected ? `1.5px solid ${cat.color}` : '1.5px solid var(--border-color)',
+                  background: isSelected ? cat.color : 'var(--bg-glass)',
+                  color: isSelected ? '#ffffff' : 'var(--text-primary)',
+                  fontWeight: isSelected ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                  boxShadow: isSelected ? '0 3px 10px rgba(0, 0, 0, 0.2)' : 'none',
+                }}
+                onClick={() => { setSelectedCategory(cat.key); setPage(1); }}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -236,12 +283,19 @@ const Inventory = () => {
                   <tr key={item.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/products/${item.sku}`)}>
                     <td>
                       {getImageUrl(item.imageUrl) ? (
-                        <img src={getImageUrl(item.imageUrl)} alt={item.name} style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
-                      ) : (
-                        <div style={{ width: '40px', height: '40px', background: 'var(--bg-glass)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <ImageIcon size={20} color="var(--text-secondary)" />
-                        </div>
-                      )}
+                        <img
+                          src={getImageUrl(item.imageUrl)}
+                          alt={item.name}
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'flex';
+                          }}
+                          style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
+                        />
+                      ) : null}
+                      <div style={{ width: '40px', height: '40px', background: 'var(--bg-glass)', borderRadius: 'var(--radius-sm)', display: getImageUrl(item.imageUrl) ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ImageIcon size={20} color="var(--text-secondary)" />
+                      </div>
                     </td>
                     <td><strong style={{ color: 'var(--accent-primary)' }}>{item.sku}</strong></td>
                     <td style={{ fontWeight: 600 }}>{item.name}</td>
@@ -262,14 +316,15 @@ const Inventory = () => {
                     </td>
                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
                       <button
-                        className="btn"
+                        type="button"
+                        className="btn btn-sm"
                         style={{
                           padding: '0.4rem 0.85rem',
                           fontSize: '0.82rem',
                           fontWeight: 600,
-                          background: 'rgba(37, 99, 235, 0.12)',
+                          background: 'var(--accent-light)',
                           color: 'var(--accent-primary)',
-                          border: '1px solid rgba(37, 99, 235, 0.25)',
+                          border: '1px solid var(--border-color)',
                           borderRadius: '20px',
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -466,6 +521,42 @@ const Inventory = () => {
                     )}
                   </div>
                 </div>
+
+                {canAssignSupplier && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1rem', padding: '0.85rem', borderRadius: '10px', background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                    <div>
+                      <label className="text-subtitle" style={{ fontSize: '0.82rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
+                        Nhà Cung Cấp Phân Phối Chính (Tùy Chọn)
+                      </label>
+                      <select
+                        className="form-input"
+                        value={newProduct.supplierId}
+                        onChange={e => setNewProduct({ ...newProduct, supplierId: e.target.value })}
+                      >
+                        <option value="">-- Gán sau trong trang Nhà Cung Cấp --</option>
+                        {suppliers.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-subtitle" style={{ fontSize: '0.82rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
+                        Giá Nhập Sỉ Từ NCC (VNĐ)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="form-input"
+                        disabled={!newProduct.supplierId}
+                        placeholder={newProduct.price ? `~${Math.round(Number(newProduct.price) * 0.75).toLocaleString('vi-VN')} đ` : 'Tự tính 75%'}
+                        value={newProduct.supplyPrice}
+                        onChange={e => setNewProduct({ ...newProduct, supplyPrice: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Mô Tả Sản Phẩm</label>

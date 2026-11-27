@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import apiClient from '../api/client';
+import { useDialog } from '../context/DialogContext';
 import { AuthContext } from '../context/AuthContext';
 import { User, Phone, MapPin, Mail, Shield, Edit2, Lock, Eye, EyeOff, X, Save, UserCheck, Key, Camera } from 'lucide-react';
 
@@ -14,6 +15,7 @@ const getImageUrl = (url) => {
 };
 
 const Profile = () => {
+  const { showAlert, showConfirm } = useDialog();
   const { user, updateUser } = useContext(AuthContext);
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -96,12 +98,12 @@ const Profile = () => {
         setShowEditModal(false);
         setAvatarFile(null);
         fetchProfile();
-        alert('Cập nhật thông tin cá nhân và ảnh đại diện thành công!');
+        showAlert('Cập nhật thông tin cá nhân và ảnh đại diện thành công!');
       } else {
-        alert('Cập nhật thất bại: ' + response.data.message);
+        showAlert('Cập nhật thất bại: ' + response.data.message);
       }
     } catch (error) {
-      alert('Lỗi cập nhật thông tin: ' + (error.response?.data?.message || error.message));
+      showAlert('Lỗi cập nhật thông tin: ' + (error.response?.data?.message || error.message));
     } finally {
       setSubmitting(false);
     }
@@ -110,7 +112,7 @@ const Profile = () => {
   const handleChangePassword = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert("Mật khẩu mới nhập lại không khớp!");
+      showAlert("Mật khẩu mới nhập lại không khớp!");
       return;
     }
     try {
@@ -120,14 +122,14 @@ const Profile = () => {
         newPassword: passwordForm.newPassword
       });
       if (response.data.success) {
-        alert('Đổi mật khẩu thành công!');
+        showAlert('Đổi mật khẩu thành công!');
         setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
         setShowPasswordModal(false);
       } else {
-        alert('Đổi mật khẩu thất bại: ' + response.data.message);
+        showAlert('Đổi mật khẩu thất bại: ' + response.data.message);
       }
     } catch (error) {
-      alert('Lỗi đổi mật khẩu: ' + (error.response?.data?.message || error.message));
+      showAlert('Lỗi đổi mật khẩu: ' + (error.response?.data?.message || error.message));
     } finally {
       setSubmitting(false);
     }
@@ -200,7 +202,13 @@ const Profile = () => {
 
           <h3 className="text-title" style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{profileData?.fullname}</h3>
           <p className="badge badge-primary" style={{ textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '1px', marginBottom: '2rem' }}>
-            {profileData?.role === 'Admin' ? 'Quản Trị Viên (Admin)' : profileData?.role === 'Manager' ? 'Quản Lý Kho (Manager)' : 'Nhân Viên Kho (Staff)'}
+            {profileData?.role === 'Admin'
+              ? 'Quản Trị Viên (Admin)'
+              : profileData?.role === 'Manager'
+                ? 'Quản Lý Kho (Manager)'
+                : profileData?.role === 'Staff'
+                  ? 'Nhân Viên Kho (Staff)'
+                  : (profileData?.role || 'Thành viên')}
           </p>
 
           <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: 'auto' }}>

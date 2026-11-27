@@ -168,7 +168,7 @@
 /* Header Styling */
 .top-header {
   height: var(--header-height);
-  background: var(--bg-glass);
+  background: var(--bg-secondary, #ffffff);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-color);
@@ -178,8 +178,8 @@
   padding: 0 2rem;
   position: sticky;
   top: 0;
-  z-index: 5;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.02);
+  z-index: 40;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
   transition: background 0.3s, border-color 0.3s;
 }
 
@@ -190,6 +190,8 @@
   -webkit-text-fill-color: transparent;
   font-weight: 700;
   letter-spacing: -0.5px;
+  white-space: nowrap;
+  font-size: clamp(1rem, 1.8vw, 1.35rem);
 }
 
 /* Header Buttons (Theme Toggle & Notifications) */

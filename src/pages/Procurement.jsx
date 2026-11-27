@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import apiClient from '../api/client';
+import { useDialog } from '../context/DialogContext';
+import { AuthContext } from '../context/AuthContext';
+import CreatePurchaseOrderModal from '../components/CreatePurchaseOrderModal';
 import {
   Building2,
   FileText,
@@ -11,7 +14,6 @@ import {
   ArrowDownToLine,
   Search,
   Eye,
-  Star,
   MapPin,
   Phone,
   Mail,
@@ -28,7 +30,9 @@ import {
   DollarSign,
   Package,
   ShieldCheck,
-  Award,
+  Edit3,
+  Link2,
+  Save,
 } from 'lucide-react';
 
 const BRAND_VISUALS = {
@@ -43,9 +47,11 @@ const BRAND_VISUALS = {
   'SUP-LENOVO': { gradient: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)', badge: 'LN', category: 'ThinkPad & Legion Gaming' },
   'SUP-LOGITECH': { gradient: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)', badge: 'LT', category: 'Bàn phím cơ & Chuột công thái học' },
   'SUP-PANASONIC': { gradient: 'linear-gradient(135deg, #1d4ed8 0%, #60a5fa 100%)', badge: 'PN', category: 'Thiết bị gia dụng & Điện lạnh' },
-  'SUP-CANON': { gradient: 'linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)', badge: 'CN', category: 'Máy ảnh Mirrorless & Máy scan' },
-  'SUP-ANKER': { gradient: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)', badge: 'AK', category: 'Củ sạc GaN & Pin dự phòng' },
+  'SUP-PANASONIC': { gradient: 'linear-gradient(135deg, #0369a1 0%, #0284c7 100%)', badge: 'PN', category: 'Điện máy gia dụng & Tủ lạnh' },
   'SUP-ACER': { gradient: 'linear-gradient(135deg, #15803d 0%, #22c55e 100%)', badge: 'AC', category: 'Laptop Predator & Màn hình gaming' },
+  'SUP-DIST-PC': { gradient: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)', badge: 'PC', category: 'Phụ Kiện Máy Tính & Gaming Gear' },
+  'SUP-DIST-APPLIANCE': { gradient: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)', badge: 'GD', category: 'Điện Lạnh & Gia Dụng Cao Cấp' },
+  'SUP-DIST-DIGITAL': { gradient: 'linear-gradient(135deg, #b91c1c 0%, #f97316 100%)', badge: 'DG', category: 'Thiết Bị Số, Camera & Âm Thanh' },
 };
 
 const getBrandMeta = (sup) => {
@@ -65,13 +71,6 @@ const getBrandMeta = (sup) => {
   };
 };
 
-const PAYMENT_TERMS_COLORS = {
-  'Net 15': { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
-  'Net 30': { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' },
-  'Net 45': { bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe' },
-  'Net 60': { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
-};
-
 const PO_STATUS_COLORS = {
   DRAFT: { label: 'Bản thảo', bg: '#fef3c7', text: '#b45309', border: '#fde68a' },
   APPROVED: { label: 'Đã duyệt (Chờ giao)', bg: '#dbeafe', text: '#1d4ed8', border: '#bfdbfe' },
@@ -85,6 +84,8 @@ const formatVND = (amount) => {
 };
 
 const Procurement = () => {
+  const { showAlert, showConfirm } = useDialog();
+  const { user, isSystemAdmin, hasPermission } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'suppliers'
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -93,23 +94,32 @@ const Procurement = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [supplierSearch, setSupplierSearch] = useState('');
-  const [supplierTermFilter, setSupplierTermFilter] = useState('ALL');
 
   // Modals
   const [showCreatePOModal, setShowCreatePOModal] = useState(false);
   const [showCreateSupModal, setShowCreateSupModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
+  const [showCatalogModal, setShowCatalogModal] = useState(false);
+  const [catalogSupplier, setCatalogSupplier] = useState(null);
+  const [catalogForm, setCatalogForm] = useState({
+    productId: '',
+    supplyPrice: '',
+    minOrderQty: 5,
+    leadTimeDays: 3,
+  });
+  const [editingPriceId, setEditingPriceId] = useState(null);
+  const [editingPriceValue, setEditingPriceValue] = useState('');
+  const [catalogSaving, setCatalogSaving] = useState(false);
 
-  // Create PO Form
-  const [poForm, setPoForm] = useState({
+  // Create PO Modal options
+  const [poModalOpts, setPoModalOpts] = useState({
     supplierId: '',
-    expectedDeliveryDays: 3,
     notes: '',
-    items: [{ productId: '', sku: '', productName: '', requestedQuantity: 10, unitPrice: '' }],
   });
 
-  // Create Supplier Form
+  // Create / Edit Supplier Form
+  const [editingSupplierId, setEditingSupplierId] = useState(null);
   const [supForm, setSupForm] = useState({
     code: '',
     name: '',
@@ -122,7 +132,7 @@ const Procurement = () => {
 
   // Lock body scroll when modal is active
   useEffect(() => {
-    if (showCreatePOModal || showCreateSupModal || showDetailModal) {
+    if (showCreatePOModal || showCreateSupModal || showDetailModal || showCatalogModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
@@ -130,7 +140,7 @@ const Procurement = () => {
     return () => {
       document.body.style.overflow = 'auto';
     };
-  }, [showCreatePOModal, showCreateSupModal, showDetailModal]);
+  }, [showCreatePOModal, showCreateSupModal, showDetailModal, showCatalogModal]);
 
   useEffect(() => {
     fetchPOs();
@@ -164,7 +174,7 @@ const Procurement = () => {
 
   const fetchProducts = async () => {
     try {
-      const res = await apiClient.get('/inventory/products?limit=100');
+      const res = await apiClient.get('/inventory/products?limit=200');
       const list = res.data?.data || res.data?.items || (Array.isArray(res.data) ? res.data : []);
       setAvailableProducts(list);
     } catch (err) {
@@ -175,94 +185,70 @@ const Procurement = () => {
   const handleApprovePO = async (id) => {
     try {
       await apiClient.post(`/procurement/purchase-orders/${id}/approve`);
-      alert('Đã phê duyệt đơn mua hàng thành công!');
+      showAlert('Đã phê duyệt đơn mua hàng thành công!', 'success', 'Phê Duyệt Đơn Hàng');
       fetchPOs();
     } catch (err) {
-      alert('Lỗi duyệt PO: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi duyệt PO: ' + (err.response?.data?.message || err.message), 'error', 'Lỗi Phê Duyệt');
     }
   };
 
   const handleReceivePO = async (id) => {
-    if (!window.confirm('Xác nhận tiếp nhận hàng về kho qua CỬA 01 - IN? Số lượng tồn kho sẽ được cập nhật tự động.')) return;
+    if (!(await showConfirm('Xác nhận tiếp nhận hàng về kho qua CỬA 01 - IN? Số lượng tồn kho sẽ được cập nhật tự động.'))) return;
     try {
       await apiClient.post(`/procurement/purchase-orders/${id}/receive`);
-      alert('Đã tiếp nhận hàng thành công qua CỬA 01 - IN! Tồn kho hệ thống đã được gia tăng.');
+      showAlert('Đã tiếp nhận hàng thành công qua CỬA 01 - IN! Tồn kho hệ thống đã được gia tăng.', 'success', 'Nhập Kho Thành Công');
       fetchPOs();
       if (showDetailModal) setShowDetailModal(false);
     } catch (err) {
-      alert('Lỗi nhập kho: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi nhập kho: ' + (err.response?.data?.message || err.message), 'error', 'Lỗi Nhập Kho');
     }
   };
 
-  const handleProductSelect = (index, productId) => {
-    const prod = availableProducts.find((p) => p.id === productId);
-    if (!prod) return;
-    const newItems = [...poForm.items];
-    const wholesalePrice = prod.price > 0 ? Math.round(prod.price * 0.75) : '';
-    newItems[index] = {
-      productId: prod.id,
-      sku: prod.sku,
-      productName: prod.name,
-      requestedQuantity: newItems[index]?.requestedQuantity || 10,
-      unitPrice: wholesalePrice,
-    };
-    setPoForm({ ...poForm, items: newItems });
+  const openCreatePOModal = () => {
+    setPoModalOpts({ supplierId: '', notes: '' });
+    setShowCreatePOModal(true);
   };
 
-  const addPOItem = () => {
-    setPoForm({
-      ...poForm,
-      items: [
-        ...poForm.items,
-        { productId: '', sku: '', productName: '', requestedQuantity: 10, unitPrice: '' },
-      ],
+  const openCreateSupplierModal = () => {
+    setEditingSupplierId(null);
+    setSupForm({
+      code: '',
+      name: '',
+      contactPerson: '',
+      phone: '',
+      email: '',
+      address: '',
+      paymentTerms: 'Net 30',
     });
+    setShowCreateSupModal(true);
   };
 
-  const removePOItem = (index) => {
-    if (poForm.items.length <= 1) return;
-    const newItems = poForm.items.filter((_, i) => i !== index);
-    setPoForm({ ...poForm, items: newItems });
-  };
-
-  const handleCreatePO = async (e) => {
-    e.preventDefault();
-    try {
-      const validItems = poForm.items
-        .filter((i) => i.productId)
-        .map((i) => ({
-          ...i,
-          requestedQuantity: Number(i.requestedQuantity) || 1,
-          unitPrice: Number(i.unitPrice) || 0,
-        }));
-      if (validItems.length === 0) {
-        alert('Vui lòng chọn ít nhất một sản phẩm!');
-        return;
-      }
-      await apiClient.post('/procurement/purchase-orders', {
-        ...poForm,
-        items: validItems,
-      });
-      alert('Tạo đơn mua hàng thành công!');
-      setShowCreatePOModal(false);
-      setPoForm({
-        supplierId: '',
-        expectedDeliveryDays: 3,
-        notes: '',
-        items: [{ productId: '', sku: '', productName: '', requestedQuantity: 10, unitPrice: '' }],
-      });
-      fetchPOs();
-    } catch (err) {
-      alert('Lỗi tạo PO: ' + (err.response?.data?.message || err.message));
-    }
+  const openEditSupplierModal = (sup) => {
+    setEditingSupplierId(sup.id);
+    setSupForm({
+      code: sup.code || '',
+      name: sup.name || '',
+      contactPerson: sup.contactPerson || '',
+      phone: sup.phone || '',
+      email: sup.email || '',
+      address: sup.address || '',
+      paymentTerms: sup.paymentTerms || 'Net 30',
+    });
+    setShowCreateSupModal(true);
   };
 
   const handleCreateSupplier = async (e) => {
     e.preventDefault();
     try {
-      await apiClient.post('/procurement/suppliers', supForm);
-      alert('Thêm nhà cung cấp mới thành công!');
+      if (editingSupplierId) {
+        await apiClient.patch(`/procurement/suppliers/${editingSupplierId}`, supForm);
+        showAlert('Cập nhật thông tin nhà cung cấp thành công!', 'success', 'Cập Nhật Nhà Cung Cấp');
+      } else {
+        await apiClient.post('/procurement/suppliers', supForm);
+        showAlert('Thêm nhà cung cấp mới thành công!', 'success', 'Thêm Nhà Cung Cấp');
+      }
       setShowCreateSupModal(false);
+      setEditingSupplierId(null);
       setSupForm({
         code: '',
         name: '',
@@ -274,42 +260,147 @@ const Procurement = () => {
       });
       fetchSuppliers();
     } catch (err) {
-      alert('Lỗi thêm NCC: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi lưu NCC: ' + (err.response?.data?.message || err.message), 'error', 'Lỗi Nhà Cung Cấp');
     }
   };
 
-  const calculatedPOTotal = poForm.items.reduce(
-    (sum, it) => sum + (Number(it.requestedQuantity) || 0) * (Number(it.unitPrice) || 0),
-    0
-  );
+  const handleDeleteSupplier = async (sup) => {
+    const confirmed = await showConfirm(
+      `Xác nhận xóa nhà cung cấp "${sup.name}" (${sup.code})? Chỉ có thể xóa nhà cung cấp chưa phát sinh đơn mua hàng (PO).`,
+      'Xác Nhận Xóa Nhà Cung Cấp',
+    );
+    if (!confirmed) return;
+    try {
+      await apiClient.delete(`/procurement/suppliers/${sup.id}`);
+      showAlert(`Đã xóa nhà cung cấp "${sup.name}" thành công.`, 'success', 'Đã Xóa Nhà Cung Cấp');
+      fetchSuppliers();
+    } catch (err) {
+      showAlert('Không thể xóa NCC: ' + (err.response?.data?.message || err.message), 'error', 'Lỗi Xóa NCC');
+    }
+  };
 
   const handleQuickCreatePO = (sup) => {
-    setPoForm({
+    setPoModalOpts({
       supplierId: sup.id,
-      expectedDeliveryDays: 3,
       notes: `Đơn nhập hàng chính ngạch từ đối tác ${sup.name}`,
-      items: [{ productId: '', sku: '', productName: '', requestedQuantity: 10, unitPrice: '' }],
     });
     setShowCreatePOModal(true);
   };
 
+  const refreshSuppliersAndSelected = async (targetSupplierId) => {
+    try {
+      const res = await apiClient.get('/procurement/suppliers');
+      const list = res.data || [];
+      setSuppliers(list);
+      if (targetSupplierId) {
+        const updated = list.find((s) => s.id === targetSupplierId) || null;
+        setCatalogSupplier(updated);
+      }
+    } catch (err) {
+      console.error('Lỗi làm mới danh mục NCC:', err);
+    }
+  };
+
+  const openCatalogModal = (sup) => {
+    setCatalogSupplier(sup);
+    setCatalogForm({ productId: '', supplyPrice: '', minOrderQty: 5, leadTimeDays: 3 });
+    setEditingPriceId(null);
+    setEditingPriceValue('');
+    setShowCatalogModal(true);
+  };
+
+  const handleCatalogSelectNewProduct = (productId) => {
+    const prod = availableProducts.find((p) => p.id === productId);
+    setCatalogForm((prev) => ({
+      ...prev,
+      productId,
+      supplyPrice: prod ? String(Math.round(Number(prod.price || 0) * 0.75)) : '',
+    }));
+  };
+
+  const handleAddCatalogProduct = async (e) => {
+    e.preventDefault();
+    if (!catalogSupplier || !catalogForm.productId) {
+      showAlert('Vui lòng chọn sản phẩm cần gán cho nhà cung cấp!', 'error', 'Thiếu Thông Tin');
+      return;
+    }
+    const prod = availableProducts.find((p) => p.id === catalogForm.productId);
+    try {
+      setCatalogSaving(true);
+      await apiClient.post(`/procurement/suppliers/${catalogSupplier.id}/products`, {
+        productId: catalogForm.productId,
+        productSku: prod?.sku,
+        productName: prod?.name,
+        supplyPrice: catalogForm.supplyPrice
+          ? Number(catalogForm.supplyPrice)
+          : Math.round(Number(prod?.price || 0) * 0.75),
+        minOrderQty: Number(catalogForm.minOrderQty) || 5,
+        leadTimeDays: Number(catalogForm.leadTimeDays) || 3,
+      });
+      setCatalogForm({ productId: '', supplyPrice: '', minOrderQty: 5, leadTimeDays: 3 });
+      await refreshSuppliersAndSelected(catalogSupplier.id);
+      showAlert('Đã cập nhật sản phẩm vào danh mục nhà cung cấp!', 'success', 'Cập Nhật Danh Mục');
+    } catch (err) {
+      showAlert('Lỗi gán sản phẩm: ' + (err.response?.data?.message || err.message), 'error', 'Lỗi');
+    } finally {
+      setCatalogSaving(false);
+    }
+  };
+
+  const handleSaveCatalogPrice = async (sp) => {
+    if (!catalogSupplier) return;
+    const priceNum = Number(editingPriceValue);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      showAlert('Đơn giá nhập sỉ không hợp lệ!', 'error', 'Lỗi Dữ Liệu');
+      return;
+    }
+    try {
+      setCatalogSaving(true);
+      await apiClient.patch(`/procurement/suppliers/${catalogSupplier.id}/products/${sp.productId}`, {
+        productSku: sp.productSku,
+        productName: sp.productName,
+        supplyPrice: priceNum,
+      });
+      setEditingPriceId(null);
+      setEditingPriceValue('');
+      await refreshSuppliersAndSelected(catalogSupplier.id);
+    } catch (err) {
+      showAlert('Lỗi cập nhật đơn giá: ' + (err.response?.data?.message || err.message), 'error', 'Lỗi');
+    } finally {
+      setCatalogSaving(false);
+    }
+  };
+
+  const handleRemoveCatalogProduct = async (sp) => {
+    if (!catalogSupplier) return;
+    const confirmed = await showConfirm(
+      `Gỡ sản phẩm "${sp.productName}" (${sp.productSku}) khỏi danh mục của ${catalogSupplier.name}?`,
+      'Xác Nhận Gỡ Sản Phẩm',
+    );
+    if (!confirmed) return;
+    try {
+      setCatalogSaving(true);
+      await apiClient.delete(`/procurement/suppliers/${catalogSupplier.id}/products/${sp.productId}`);
+      await refreshSuppliersAndSelected(catalogSupplier.id);
+      showAlert('Đã gỡ sản phẩm khỏi danh mục nhà cung cấp.', 'success', 'Đã Gỡ Sản Phẩm');
+    } catch (err) {
+      showAlert('Lỗi gỡ sản phẩm: ' + (err.response?.data?.message || err.message), 'error', 'Lỗi');
+    } finally {
+      setCatalogSaving(false);
+    }
+  };
+
   const filteredSuppliers = suppliers.filter((sup) => {
     const q = supplierSearch.trim().toLowerCase();
-    const matchSearch =
+    return (
       !q ||
       sup.name?.toLowerCase().includes(q) ||
       sup.code?.toLowerCase().includes(q) ||
       sup.contactPerson?.toLowerCase().includes(q) ||
       sup.phone?.includes(q) ||
       sup.email?.toLowerCase().includes(q) ||
-      sup.address?.toLowerCase().includes(q);
-
-    if (!matchSearch) return false;
-
-    if (supplierTermFilter === 'VIP') return Number(sup.rating) >= 4.8;
-    if (supplierTermFilter !== 'ALL') return sup.paymentTerms === supplierTermFilter;
-
-    return true;
+      sup.address?.toLowerCase().includes(q)
+    );
   });
 
   return (
@@ -327,14 +418,16 @@ const Procurement = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <button
-            className="btn btn-primary"
-            onClick={() => setShowCreatePOModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-          >
-            <Plus size={18} />
-            <span>Tạo PO Thủ Công</span>
-          </button>
+          {(isSystemAdmin || hasPermission('procurement:create')) && (
+            <button
+              className="btn btn-primary"
+              onClick={openCreatePOModal}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Plus size={18} />
+              <span>Tạo đơn đặt hàng mới</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -384,7 +477,7 @@ const Procurement = () => {
         <>
           <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {['ALL', 'DRAFT', 'APPROVED', 'RECEIVED'].map((st) => (
+              {['ALL', 'APPROVED', 'ORDERED', 'RECEIVED'].map((st) => (
                 <button
                   key={st}
                   className={`btn btn-sm ${statusFilter === st ? 'btn-primary' : 'btn-outline'}`}
@@ -415,7 +508,6 @@ const Procurement = () => {
                 <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', borderBottom: '2px solid var(--border-color)' }}>
                   <th style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>Số Đơn PO</th>
                   <th style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>Nhà Cung Cấp</th>
-                  <th style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>Nguồn Tạo</th>
                   <th style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>Trạng Thái</th>
                   <th style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>Tổng Tiền Nhập</th>
                   <th style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>Cổng Tiếp Nhận</th>
@@ -425,14 +517,14 @@ const Procurement = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem' }}>
                       Đang tải danh sách đơn PO...
                     </td>
                   </tr>
                 ) : purchaseOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
-                      Chưa có đơn mua hàng nào. Bấm <strong>Tạo PO Thủ Công</strong> để tạo đơn mua hàng mới!
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
+                      Chưa có đơn mua hàng nào. Bấm <strong>Tạo đơn đặt hàng mới</strong> để tạo đơn mua hàng mới!
                     </td>
                   </tr>
                 ) : (
@@ -444,27 +536,11 @@ const Procurement = () => {
                           <span style={{ color: 'var(--accent-primary)' }}>{po.poNumber}</span>
                         </td>
                         <td style={{ padding: '0.85rem 1rem', fontWeight: 600, borderRight: '1px solid var(--border-color)' }}>{po.supplierName}</td>
-                        <td style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>
-                          {po.triggerSource === 'AI_AUTO_SUGGESTION' ? (
-                            <span style={{ background: '#f5f3ff', color: '#6d28d9', padding: '3px 8px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <Sparkles size={12} /> AI ROP/EOQ
-                            </span>
-                          ) : (
-                            <span style={{ background: '#f1f5f9', color: '#475569', padding: '3px 8px', borderRadius: 4, fontSize: '0.75rem' }}>
-                              Thủ công
-                            </span>
-                          )}
-                        </td>
+                        
                         <td style={{ padding: '0.85rem 1rem', borderRight: '1px solid var(--border-color)' }}>
                           <span
+                            className={`status-pill status-pill-${po.status?.toLowerCase().replace(/_/g, '-')}`}
                             style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              padding: '3px 8px',
-                              borderRadius: 6,
-                              fontSize: '0.8rem',
-                              fontWeight: 600,
                               background: st.bg,
                               color: st.text,
                               border: `1px solid ${st.border}`,
@@ -479,7 +555,7 @@ const Procurement = () => {
                           {formatVND(po.totalAmount)}
                         </td>
                         <td style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', borderRight: '1px solid var(--border-color)' }}>
-                          <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: 4, fontWeight: 600, fontSize: '0.75rem' }}>
+                          <span style={{ background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid var(--warning)', padding: '3px 8px', borderRadius: 4, fontWeight: 600, fontSize: '0.75rem' }}>
                             {po.receivingDock || 'CỬA 01 - IN'}
                           </span>
                         </td>
@@ -497,7 +573,7 @@ const Procurement = () => {
                               <span style={{ marginLeft: 4, fontSize: '0.75rem' }}>Chi tiết</span>
                             </button>
 
-                            {po.status === 'DRAFT' && (
+                            {po.status === 'DRAFT' && (isSystemAdmin || hasPermission('procurement:approve')) && (
                               <button
                                 className="btn btn-sm btn-primary"
                                 onClick={() => handleApprovePO(po.id)}
@@ -508,7 +584,7 @@ const Procurement = () => {
                               </button>
                             )}
 
-                            {po.status === 'APPROVED' && (
+                            {po.status === 'APPROVED' && (isSystemAdmin || hasPermission('procurement:receive')) && (
                               <button
                                 className="btn btn-sm"
                                 onClick={() => handleReceivePO(po.id)}
@@ -546,28 +622,6 @@ const Procurement = () => {
             </div>
 
             <div className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Award size={22} />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Đối Tác VIP (Rating ≥ 4.8)</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#b45309' }}>
-                  {suppliers.filter((s) => Number(s.rating) >= 4.8).length} hãng
-                </div>
-              </div>
-            </div>
-
-            <div className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: '#ecfdf5', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CreditCard size={22} />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Kỳ Hạn Chuẩn</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#047857' }}>Net 30</div>
-              </div>
-            </div>
-
-            <div className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <div style={{ width: 44, height: 44, borderRadius: 10, background: '#ffedd5', color: '#c2410c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Truck size={22} />
               </div>
@@ -578,45 +632,33 @@ const Procurement = () => {
             </div>
           </div>
 
-          {/* Search, Filter & Add Supplier Action */}
+          {/* Search & Add Supplier Action */}
           <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {[
-                { key: 'ALL', label: `Tất cả (${suppliers.length})` },
-                { key: 'VIP', label: '⭐ VIP (4.8+)' },
-                { key: 'Net 15', label: 'Net 15' },
-                { key: 'Net 30', label: 'Net 30' },
-                { key: 'Net 45', label: 'Net 45' },
-              ].map((f) => (
-                <button
-                  key={f.key}
-                  className={`btn btn-sm ${supplierTermFilter === f.key ? 'btn-primary' : 'btn-outline'}`}
-                  onClick={() => setSupplierTermFilter(f.key)}
-                >
-                  {f.label}
-                </button>
-              ))}
+            <div style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: '280px', maxWidth: '460px' }}>
+              <input
+                type="text"
+                className="input"
+                placeholder="Tìm tên, mã, người liên hệ, SĐT..."
+                value={supplierSearch}
+                onChange={(e) => setSupplierSearch(e.target.value)}
+              />
             </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: '0.5rem', minWidth: '280px' }}>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Tìm tên, mã, người liên hệ, SĐT..."
-                  value={supplierSearch}
-                  onChange={(e) => setSupplierSearch(e.target.value)}
-                />
-              </div>
+              <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                Hiển thị {filteredSuppliers.length} / {suppliers.length} nhà cung cấp
+              </span>
 
-              <button
-                className="btn btn-primary"
-                onClick={() => setShowCreateSupModal(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-              >
-                <Plus size={16} />
-                <span>Thêm Nhà Cung Cấp Mới</span>
-              </button>
+              {(isSystemAdmin || hasPermission('procurement:create')) && (
+                <button
+                  className="btn btn-primary"
+                  onClick={openCreateSupplierModal}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <Plus size={16} />
+                  <span>Thêm Nhà Cung Cấp Mới</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -628,7 +670,6 @@ const Procurement = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1.25rem' }}>
               {filteredSuppliers.map((sup) => {
                 const meta = getBrandMeta(sup);
-                const termStyle = PAYMENT_TERMS_COLORS[sup.paymentTerms] || PAYMENT_TERMS_COLORS['Net 30'];
 
                 return (
                   <div
@@ -685,32 +726,31 @@ const Procurement = () => {
                             </h3>
                           </div>
                         </div>
-
-                        {/* Rating Pill */}
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            background: '#fef3c7',
-                            color: '#b45309',
-                            border: '1px solid #fde68a',
-                            padding: '3px 8px',
-                            borderRadius: '999px',
-                            fontWeight: 700,
-                            fontSize: '0.82rem',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <Star size={14} fill="#f59e0b" color="#f59e0b" />
-                          <span>{Number(sup.rating || 5.0).toFixed(1)}</span>
-                        </div>
                       </div>
 
                       {/* Category Tag */}
-                      <div style={{ marginBottom: '0.85rem' }}>
+                      <div style={{ marginBottom: '0.85rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.75rem', background: 'rgba(99, 102, 241, 0.08)', color: 'var(--accent-primary)', padding: '3px 8px', borderRadius: '6px', fontWeight: 600, display: 'inline-block' }}>
                           📦 {meta.category}
+                        </span>
+                        <span
+                          onClick={() => openCatalogModal(sup)}
+                          title="Xem & quản lý danh mục sản phẩm cung ứng"
+                          style={{
+                            fontSize: '0.75rem',
+                            background: (sup.products?.length || 0) > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.12)',
+                            color: (sup.products?.length || 0) > 0 ? '#059669' : '#d97706',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Package size={12} />
+                          {sup.products?.length || 0} SP cung ứng
                         </span>
                       </div>
 
@@ -758,35 +798,54 @@ const Procurement = () => {
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        gap: '0.5rem',
+                        gap: '0.4rem',
                         flexWrap: 'wrap',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Kỳ hạn:</span>
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            background: termStyle.bg,
-                            color: termStyle.text,
-                            border: `1px solid ${termStyle.border}`,
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            fontSize: '0.75rem',
-                          }}
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          onClick={() => openCatalogModal(sup)}
+                          title="Xem & quản lý sản phẩm của nhà cung cấp này"
+                          style={{ padding: '5px 9px', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                         >
-                          {sup.paymentTerms || 'Net 30'}
-                        </span>
+                          <Eye size={13} />
+                          <span>Xem Sản Phẩm ({sup.products?.length || 0})</span>
+                        </button>
+                        {(isSystemAdmin || hasPermission('procurement:create')) && (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline"
+                              onClick={() => openEditSupplierModal(sup)}
+                              title="Chỉnh sửa nhà cung cấp"
+                              style={{ padding: '5px 7px' }}
+                            >
+                              <Edit3 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline"
+                              onClick={() => handleDeleteSupplier(sup)}
+                              title="Xóa nhà cung cấp"
+                              style={{ padding: '5px 7px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.35)' }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
                       </div>
-
-                      <button
-                        className="btn btn-sm btn-primary"
-                        onClick={() => handleQuickCreatePO(sup)}
-                        style={{ padding: '5px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        <ShoppingBag size={13} />
-                        <span>Tạo PO Nhanh</span>
-                      </button>
+                      {(isSystemAdmin || hasPermission('procurement:create')) && (
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleQuickCreatePO(sup)}
+                          style={{ padding: '5px 9px', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <ShoppingBag size={13} />
+                          <span>Tạo đơn đặt hàng mới</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -846,10 +905,12 @@ const Procurement = () => {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Thêm Nhà Cung Cấp Mới
+                    {editingSupplierId ? 'Cập Nhật Nhà Cung Cấp' : 'Thêm Nhà Cung Cấp Mới'}
                   </h3>
                   <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Khởi tạo hồ sơ đối tác cung ứng thiết bị điện máy chính hãng
+                    {editingSupplierId
+                      ? 'Chỉnh sửa thông tin liên hệ đối tác cung ứng'
+                      : 'Khởi tạo hồ sơ đối tác cung ứng thiết bị điện máy chính hãng'}
                   </p>
                 </div>
               </div>
@@ -874,6 +935,7 @@ const Procurement = () => {
                     <input
                       type="text"
                       required
+                      disabled={!!editingSupplierId}
                       className="input"
                       placeholder="SUP-ASUS"
                       value={supForm.code}
@@ -1002,279 +1064,20 @@ const Procurement = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: TẠO ĐƠN ĐẶT HÀNG PO THỦ CÔNG (PORTAL TO BODY - STRICT CENTER) */}
+      {/* MODAL 2: TẠO ĐƠN ĐẶT HÀNG PO THỦ CÔNG (SHARED COMPONENT) */}
       {/* ========================================================================= */}
-      {showCreatePOModal && ReactDOM.createPortal(
-        <div
-          className="modal-backdrop"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            width: '100vw',
-            height: '100vh',
-            background: 'rgba(15, 23, 42, 0.75)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 99999,
-            padding: '1rem',
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowCreatePOModal(false);
-          }}
-        >
-          <div
-            className="modal-content animate-scale-in"
-            style={{
-              maxWidth: '820px',
-              width: '95%',
-              maxHeight: '85vh',
-              display: 'flex',
-              flexDirection: 'column',
-              background: 'var(--bg-secondary, #ffffff)',
-              borderRadius: '16px',
-              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.5)',
-              border: '1px solid var(--border-color)',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Header (Fixed) */}
-            <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ShoppingBag size={20} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Tạo Đơn Đặt Hàng Mới
-                  </h3>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    Lập phiếu nhập hàng chính hãng chuyển về kho qua <strong>CỬA 01 - IN (CẢNG TIẾP NHẬN A)</strong>
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreatePOModal(false)}
-                style={{ background: 'var(--bg-primary, #f1f5f9)', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Scrollable Form Content */}
-            <form onSubmit={handleCreatePO} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-              <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto', flex: 1 }}>
-                {/* Config section */}
-                <div style={{ background: 'var(--bg-primary, #f8fafc)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border-color)', marginBottom: '1rem', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '0.75rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: 3 }}>
-                      <Building2 size={13} color="var(--accent-primary)" />
-                      Nhà Cung Cấp Chính Hãng <span className="req">*</span>
-                    </label>
-                    <select
-                      required
-                      className="input"
-                      value={poForm.supplierId}
-                      onChange={(e) => setPoForm({ ...poForm, supplierId: e.target.value })}
-                    >
-                      <option value="">-- Chọn nhà phân phối thiết bị --</option>
-                      {suppliers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.code}) - {s.paymentTerms}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: 3 }}>
-                      <Calendar size={13} color="var(--accent-primary)" />
-                      Thời gian giao hàng dự kiến
-                    </label>
-                    <select
-                      className="input"
-                      value={poForm.expectedDeliveryDays}
-                      onChange={(e) => setPoForm({ ...poForm, expectedDeliveryDays: Number(e.target.value) })}
-                    >
-                      <option value="1">1 ngày (Giao gấp / Hỏa tốc)</option>
-                      <option value="3">3 ngày (Tiêu chuẩn đường bộ)</option>
-                      <option value="5">5 ngày (Vận chuyển liên tỉnh)</option>
-                      <option value="7">7 ngày (Hàng dự án / số lượng lớn)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Items header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Package size={16} color="var(--accent-primary)" />
-                    <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Danh Mục Thiết Bị Cần Nhập Sỉ</span>
-                    <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.72rem', fontWeight: 700, padding: '2px 7px', borderRadius: 10 }}>
-                      {poForm.items.length} mặt hàng
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline"
-                    onClick={addPOItem}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: '0.78rem' }}
-                  >
-                    <Plus size={13} /> Thêm sản phẩm
-                  </button>
-                </div>
-
-                {/* Items Table Container */}
-                <div style={{ border: '1px solid var(--border-color)', borderRadius: 10, overflow: 'hidden' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1.4fr 1.4fr 36px', gap: '0.5rem', padding: '0.5rem 0.75rem', background: 'var(--bg-primary, #f1f5f9)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                    <div>Sản Phẩm Thiết Bị</div>
-                    <div style={{ textAlign: 'center' }}>Số Lượng</div>
-                    <div>Đơn Giá Sỉ (VNĐ)</div>
-                    <div style={{ textAlign: 'right' }}>Thành Tiền</div>
-                    <div></div>
-                  </div>
-
-                  <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '0.4rem' }}>
-                    {poForm.items.map((item, idx) => {
-                      const rowSubtotal = (Number(item.requestedQuantity) || 0) * (Number(item.unitPrice) || 0);
-                      return (
-                        <div
-                          key={idx}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '3fr 1fr 1.4fr 1.4fr 36px',
-                            gap: '0.5rem',
-                            alignItems: 'center',
-                            padding: '0.45rem 0.5rem',
-                            borderRadius: 6,
-                            marginBottom: 4,
-                            background: 'var(--bg-secondary, #ffffff)',
-                            border: '1px solid var(--border-color)',
-                          }}
-                        >
-                          <select
-                            className="input"
-                            style={{ padding: '0.4rem 0.6rem', fontSize: '0.82rem' }}
-                            value={item.productId}
-                            onChange={(e) => handleProductSelect(idx, e.target.value)}
-                            required
-                          >
-                            <option value="">-- Chọn sản phẩm --</option>
-                            {availableProducts.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.sku} - {p.name}
-                              </option>
-                            ))}
-                          </select>
-
-                          <input
-                            type="number"
-                            min="1"
-                            placeholder="1"
-                            className="input"
-                            style={{ padding: '0.4rem 0.3rem', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }}
-                            value={item.requestedQuantity ?? ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const newItems = [...poForm.items];
-                              newItems[idx].requestedQuantity = val === '' ? '' : Math.max(1, Number(val));
-                              setPoForm({ ...poForm, items: newItems });
-                            }}
-                            onBlur={() => {
-                              if (!item.requestedQuantity) {
-                                const newItems = [...poForm.items];
-                                newItems[idx].requestedQuantity = 1;
-                                setPoForm({ ...poForm, items: newItems });
-                              }
-                            }}
-                          />
-
-                          <input
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            className="input"
-                            style={{ padding: '0.4rem 0.6rem', fontSize: '0.82rem' }}
-                            value={item.unitPrice ?? ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const newItems = [...poForm.items];
-                              newItems[idx].unitPrice = val === '' ? '' : Math.max(0, Number(val));
-                              setPoForm({ ...poForm, items: newItems });
-                            }}
-                            onBlur={() => {
-                              if (item.unitPrice === '') {
-                                const newItems = [...poForm.items];
-                                newItems[idx].unitPrice = 0;
-                                setPoForm({ ...poForm, items: newItems });
-                              }
-                            }}
-                          />
-
-                          <div style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.85rem' }}>
-                            {formatVND(rowSubtotal)}
-                          </div>
-
-                          <div style={{ textAlign: 'center' }}>
-                            {poForm.items.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removePOItem(idx)}
-                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 2 }}
-                                title="Xóa dòng"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer (Always Visible at bottom) */}
-              <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-primary, #f8fafc)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <MapPin size={12} color="#16a34a" /> Cổng tiếp nhận: <strong>CỬA 01 - IN</strong>
-                  </div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-primary)' }}>
-                    Tổng tiền: {formatVND(calculatedPOTotal)}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={() => setShowCreatePOModal(false)}
-                    style={{ padding: '0.5rem 1.1rem' }}
-                  >
-                    Hủy bỏ
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1.35rem' }}
-                  >
-                    <CheckCircle2 size={16} />
-                    <span>Xác Nhận Tạo Đơn PO</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
+      <CreatePurchaseOrderModal
+        isOpen={showCreatePOModal}
+        onClose={() => setShowCreatePOModal(false)}
+        title="Tạo Đơn Đặt Hàng Mới"
+        submitLabel="Tạo đơn đặt hàng mới"
+        suppliers={suppliers}
+        availableProducts={availableProducts}
+        initialSupplierId={poModalOpts.supplierId}
+        initialNotes={poModalOpts.notes}
+        onSuccess={() => fetchPOs()}
+        onOpenSupplierCatalog={(sup) => openCatalogModal(sup)}
+      />
 
       {/* ========================================================================= */}
       {/* MODAL 3: CHI TIẾT ĐƠN PO (PORTAL TO BODY - STRICT CENTER) */}
@@ -1339,7 +1142,7 @@ const Procurement = () => {
                 <div>Cổng giao nhận: <strong>{selectedPO.receivingDock || 'CỬA 01 - IN'}</strong></div>
                 <div>Trạng thái: <strong>{selectedPO.status}</strong></div>
                 <div>Ngày dự kiến: <strong>{new Date(selectedPO.expectedDeliveryDate).toLocaleDateString('vi-VN')}</strong></div>
-                <div>Nguồn tạo: <strong>{selectedPO.triggerSource === 'AI_AUTO_SUGGESTION' ? 'AI ROP/EOQ Tự động' : 'Thủ công'}</strong></div>
+                
               </div>
 
               <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Danh mục thiết bị:</h4>
@@ -1351,7 +1154,9 @@ const Procurement = () => {
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Mã SKU: {it.sku}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{it.requestedQuantity} chiếc</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>
+                        {it.requestedQuantity} {availableProducts.find((p) => p.id === it.productId)?.unit || 'chiếc'}
+                      </div>
                       <div style={{ fontSize: '0.78rem', color: 'var(--accent-primary)' }}>{formatVND(it.unitPrice)}</div>
                     </div>
                   </div>
@@ -1371,7 +1176,7 @@ const Procurement = () => {
                 <button className="btn btn-outline" onClick={() => setShowDetailModal(false)} style={{ padding: '0.5rem 1rem' }}>
                   Đóng
                 </button>
-                {selectedPO.status === 'APPROVED' && (
+                {selectedPO.status === 'APPROVED' && (isSystemAdmin || hasPermission('procurement:receive')) && (
                   <button
                     className="btn btn-primary"
                     onClick={() => handleReceivePO(selectedPO.id)}
@@ -1384,6 +1189,291 @@ const Procurement = () => {
             </div>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: QUẢN LÝ DANH MỤC SẢN PHẨM CUNG ỨNG THEO NCC                     */}
+      {/* ========================================================================= */}
+      {showCatalogModal && catalogSupplier && ReactDOM.createPortal(
+        (() => {
+          const canEditCatalog = isSystemAdmin || hasPermission('procurement:create');
+          const assignedIds = new Set((catalogSupplier.products || []).map((sp) => sp.productId));
+          const unassignedProducts = [...availableProducts]
+            .filter((p) => !assignedIds.has(p.id))
+            .sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+          const catalogVisual = BRAND_VISUALS[catalogSupplier.code] || {
+            gradient: 'linear-gradient(135deg, #4338ca 0%, #6366f1 100%)',
+            badge: (catalogSupplier.code || 'SP').slice(-2),
+            category: 'Thiết bị điện tử & Gia dụng',
+          };
+
+          return (
+            <div
+              className="modal-backdrop"
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100vw',
+                height: '100vh',
+                zIndex: 9999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(15, 23, 42, 0.55)',
+                backdropFilter: 'blur(4px)',
+                padding: '1rem',
+              }}
+              onClick={() => setShowCatalogModal(false)}
+            >
+              <div
+                className="modal-content"
+                style={{
+                  maxWidth: '880px',
+                  width: '100%',
+                  maxHeight: '88vh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: 0,
+                  overflow: 'hidden',
+                  borderRadius: '16px',
+                  background: 'var(--bg-secondary, #ffffff)',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.15rem 1.5rem', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary, #f8fafc)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ background: catalogVisual.gradient, color: 'white', width: 42, height: 42, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
+                      {catalogVisual.badge}
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        Danh Mục Sản Phẩm — {catalogSupplier.name}
+                      </h3>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Mã NCC: <strong>{catalogSupplier.code}</strong> · Đang cung ứng{' '}
+                        <strong style={{ color: 'var(--accent-primary)' }}>{catalogSupplier.products?.length || 0}</strong> mặt hàng
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline"
+                    onClick={() => setShowCatalogModal(false)}
+                    style={{ width: 32, height: 32, padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {canEditCatalog && (
+                    <form
+                      onSubmit={handleAddCatalogProduct}
+                      style={{
+                        background: 'var(--bg-primary, #f8fafc)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '12px',
+                        padding: '0.9rem 1rem',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Link2 size={14} color="var(--accent-primary)" />
+                        <span>Gán Thêm Sản Phẩm Kho Vào Nhà Cung Cấp Này</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1.2fr 0.7fr auto', gap: '0.6rem', alignItems: 'end' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                            Chọn Sản Phẩm Chưa Thuộc NCC ({unassignedProducts.length})
+                          </label>
+                          <select
+                            className="input"
+                            style={{ padding: '0.45rem 0.6rem', fontSize: '0.82rem' }}
+                            value={catalogForm.productId}
+                            onChange={(e) => handleCatalogSelectNewProduct(e.target.value)}
+                          >
+                            <option value="">-- Chọn sản phẩm cần gán --</option>
+                            {unassignedProducts.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.sku} - {p.name} ({formatVND(p.price)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                            Đơn Giá Nhập Sỉ (VNĐ)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="input"
+                            style={{ padding: '0.45rem 0.6rem', fontSize: '0.82rem' }}
+                            placeholder="VD: 15000000"
+                            value={catalogForm.supplyPrice}
+                            onChange={(e) => setCatalogForm({ ...catalogForm, supplyPrice: e.target.value })}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                            SL Tối Thiểu
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            className="input"
+                            style={{ padding: '0.45rem 0.5rem', fontSize: '0.82rem', textAlign: 'center' }}
+                            value={catalogForm.minOrderQty}
+                            onChange={(e) => setCatalogForm({ ...catalogForm, minOrderQty: e.target.value })}
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="btn btn-primary btn-sm"
+                          disabled={catalogSaving || !catalogForm.productId}
+                          style={{ padding: '0.48rem 0.9rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                        >
+                          <Plus size={14} />
+                          <span>Thêm Vào NCC</span>
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Catalog Table */}
+                  <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--bg-primary, #f1f5f9)', color: 'var(--text-secondary)', textAlign: 'left', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+                          <th style={{ padding: '0.65rem 0.85rem' }}>SKU</th>
+                          <th style={{ padding: '0.65rem 0.85rem' }}>Tên Sản Phẩm</th>
+                          <th style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>Giá Nhập Sỉ</th>
+                          <th style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>MOQ</th>
+                          {canEditCatalog && <th style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>Thao Tác</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(!catalogSupplier.products || catalogSupplier.products.length === 0) ? (
+                          <tr>
+                            <td colSpan={canEditCatalog ? 5 : 4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                              Nhà cung cấp này chưa có sản phẩm nào trong danh mục cung ứng.
+                            </td>
+                          </tr>
+                        ) : (
+                          catalogSupplier.products.map((sp) => {
+                            const isEditing = editingPriceId === sp.productId;
+                            return (
+                              <tr key={sp.id || sp.productId} style={{ borderTop: '1px solid var(--border-color)' }}>
+                                <td style={{ padding: '0.65rem 0.85rem', fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
+                                  {sp.productSku}
+                                </td>
+                                <td style={{ padding: '0.65rem 0.85rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                                  {sp.productName}
+                                </td>
+                                <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', fontWeight: 700 }}>
+                                  {isEditing ? (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        className="input"
+                                        style={{ width: '130px', padding: '0.25rem 0.45rem', textAlign: 'right', fontSize: '0.82rem' }}
+                                        value={editingPriceValue}
+                                        onChange={(e) => setEditingPriceValue(e.target.value)}
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-primary"
+                                        disabled={catalogSaving}
+                                        onClick={() => handleSaveCatalogPrice(sp)}
+                                        style={{ padding: '4px 7px' }}
+                                        title="Lưu đơn giá"
+                                      >
+                                        <Save size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline"
+                                        onClick={() => {
+                                          setEditingPriceId(null);
+                                          setEditingPriceValue('');
+                                        }}
+                                        style={{ padding: '4px 7px' }}
+                                        title="Hủy"
+                                      >
+                                        <X size={13} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    formatVND(sp.supplyPrice)
+                                  )}
+                                </td>
+                                <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                  {sp.minOrderQty || 1}
+                                </td>
+                                {canEditCatalog && (
+                                  <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
+                                    <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline"
+                                        onClick={() => {
+                                          setEditingPriceId(sp.productId);
+                                          setEditingPriceValue(String(Math.round(Number(sp.supplyPrice) || 0)));
+                                        }}
+                                        style={{ padding: '3px 7px', fontSize: '0.75rem' }}
+                                        title="Sửa giá nhập sỉ"
+                                      >
+                                        <Edit3 size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline"
+                                        onClick={() => handleRemoveCatalogProduct(sp)}
+                                        style={{ padding: '3px 7px', fontSize: '0.75rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
+                                        title="Gỡ khỏi danh mục NCC"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-primary, #f8fafc)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Khi tạo PO cho <strong>{catalogSupplier.name}</strong>, hệ thống chỉ cho phép chọn các sản phẩm trong danh sách trên.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => setShowCatalogModal(false)}
+                    style={{ padding: '0.45rem 1.15rem' }}
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })(),
         document.body
       )}
     </div>

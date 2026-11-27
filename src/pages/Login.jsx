@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext, getLandingPath } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Package, ArrowRight, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import './Login.css';
@@ -18,7 +18,7 @@ const Login = () => {
     setError('');
     try {
       const loggedInUser = await login(formData.email, formData.password);
-      navigate(loggedInUser.role === 'Staff' ? '/inventory' : '/');
+      navigate(getLandingPath(loggedInUser));
     } catch (err) {
       if (err.code === 'ERR_NETWORK' || !err.response || err.response?.status === 503) {
         setError('⚠️ Lỗi: Mất kết nối đến hệ thống máy chủ hoặc Message Bus. Đang thử kết nối lại...');

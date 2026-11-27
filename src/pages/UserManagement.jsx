@@ -1,14 +1,21 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import apiClient from '../api/client';
-import { AuthContext } from '../context/AuthContext';
+import { useDialog } from '../context/DialogContext';
+import { AuthContext, isSystemAdminUser } from '../context/AuthContext';
 import { Plus, Users, Search, Edit, Trash2, Key, Eye, EyeOff, X, Save, AlertTriangle, UserPlus } from 'lucide-react';
 
 const UserManagement = () => {
-  const { user } = useContext(AuthContext);
+  const { showAlert, showConfirm } = useDialog();
+  const { user, isSystemAdmin, hasPermission } = useContext(AuthContext);
+  const canCreate = hasPermission('users:create');
+  const canUpdate = hasPermission('users:update');
+  const canDelete = hasPermission('users:delete');
+  const canManageRoles = hasPermission('roles:manage');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
@@ -80,8 +87,13 @@ const UserManagement = () => {
     setIsCustomPermissions(false);
     setUserPermissions([]);
     setShowPassword(false);
+    const defaultRole =
+      roles.find((r) => r.name === 'Staff' || r.name === 'Nhân viên kho')?.name ||
+      roles.find((r) => !r.isSystemAdmin && !['admin', 'quản trị viên'].includes((r.name || '').trim().toLowerCase()))?.name ||
+      roles[0]?.name ||
+      'Staff';
     setNewUser({
-      email: '', password: '', fullname: '', role: 'Staff', address: '', phone: '', gender: 'Male'
+      email: '', password: '', fullname: '', role: defaultRole, address: '', phone: '', gender: 'Male'
     });
     setShowModal(true);
   };
@@ -146,7 +158,7 @@ const UserManagement = () => {
       setDeletingUser(null);
       fetchUsers();
     } catch (err) {
-      alert('Lỗi xóa người dùng: ' + (err.response?.data?.message || err.message));
+      showAlert('Lỗi xóa người dùng: ' + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
@@ -167,7 +179,7 @@ const UserManagement = () => {
         };
         await apiClient.patch(`/users/${editingUserId}`, payload);
       } else {
-        await apiClient.post('/auth/register', newUser);
+        await apiClient.post('/users', newUser);
       }
       setShowModal(false);
       setNewUser({
@@ -175,16 +187,22 @@ const UserManagement = () => {
       });
       fetchUsers();
     } catch (err) {
-      alert(`Lỗi ${isEditMode ? 'cập nhật' : 'tạo mới'} người dùng: ` + (err.response?.data?.message || err.message));
+      showAlert(`Lỗi ${isEditMode ? 'cập nhật' : 'tạo mới'} người dùng: ` + (err.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const filteredUsers = users.filter(u =>
-    u.email?.toLowerCase().includes(search.toLowerCase()) ||
-    u.fullname?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredUsers = users.filter((u) => {
+    const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
+    if (!matchRole) return false;
+    const q = search.trim().toLowerCase();
+    return (
+      !q ||
+      u.email?.toLowerCase().includes(q) ||
+      u.fullname?.toLowerCase().includes(q)
+    );
+  });
 
   const isMobile = window.innerWidth <= 768;
   const modalBackdropStyle = {
@@ -210,14 +228,16 @@ const UserManagement = () => {
           <Users size={28} color="var(--accent-primary)" />
           <h1 className="text-title" style={{ marginBottom: 0 }}>Quản Lý Người Dùng & Tài Khoản</h1>
         </div>
-        <button className="btn btn-primary" onClick={openAddModal} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Plus size={18} /> Thêm Người Dùng Mới
-        </button>
+        {canCreate && (
+          <button className="btn btn-primary" onClick={openAddModal} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Plus size={18} /> Thêm Người Dùng Mới
+          </button>
+        )}
       </div>
 
       <div className="glass-card">
-        <div style={{ display: 'flex', marginBottom: '1.5rem', paddingBottom: '1rem' }}>
-          <div className="search-box">
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', paddingBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="search-box" style={{ flex: 1, minWidth: '240px' }}>
             <Search size={18} color="var(--text-secondary)" />
             <input
               type="text"
@@ -226,6 +246,20 @@ const UserManagement = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <select
+            className="form-input"
+            aria-label="Lọc theo vai trò"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            style={{ width: '210px', flexShrink: 0 }}
+          >
+            <option value="ALL">Tất cả vai trò ({users.length})</option>
+            {roles.map((r) => (
+              <option key={r.name} value={r.name}>
+                {r.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="table-container">
@@ -239,45 +273,78 @@ const UserManagement = () => {
                 <th>Số Điện Thoại</th>
                 <th>Giới Tính</th>
                 <th>Địa Chỉ</th>
-                <th style={{ textAlign: 'center', width: '90px' }}>Thao Tác</th>
+                {(canUpdate || canDelete) && <th style={{ textAlign: 'center', width: '90px' }}>Thao Tác</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="8" style={{ padding: '2rem', textAlign: 'center' }}>Đang tải danh sách người dùng...</td></tr>
+                <tr><td colSpan={canUpdate || canDelete ? 8 : 7} style={{ padding: '2rem', textAlign: 'center' }}>Đang tải danh sách người dùng...</td></tr>
               ) : filteredUsers.map((u, idx) => (
                 <tr key={u._id}>
                   <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>{idx + 1}</td>
                   <td><strong>{u.email}</strong></td>
                   <td style={{ fontWeight: 600 }}>{u.fullname}</td>
                   <td>
-                    <span className={`badge ${u.role === 'Admin' ? 'badge-danger' : (u.role === 'Manager' ? 'badge-primary' : 'badge-success')}`}>
-                      {u.role === 'Admin' ? 'Quản trị viên (Admin)' : u.role === 'Manager' ? 'Quản lý (Manager)' : 'Nhân viên (Staff)'}
-                    </span>
+                    {(() => {
+                      const matchedRole = roles.find((r) => r.name === u.role);
+                      const isTargetAdmin =
+                        Boolean(matchedRole?.isSystemAdmin) ||
+                        ['admin', 'quản trị viên'].includes((u.role || '').trim().toLowerCase());
+                      const badgeCls = isTargetAdmin
+                        ? 'badge-danger'
+                        : u.role === 'Manager' || u.role === 'Quản lý kho'
+                          ? 'badge-primary'
+                          : u.role === 'Staff' || u.role === 'Nhân viên kho'
+                            ? 'badge-success'
+                            : 'badge-warning';
+                      const label =
+                        u.role === 'Admin'
+                          ? 'Quản trị viên (Admin)'
+                          : u.role === 'Manager'
+                            ? 'Quản lý (Manager)'
+                            : u.role === 'Staff'
+                              ? 'Nhân viên (Staff)'
+                              : u.role;
+                      return <span className={`badge ${badgeCls}`}>{label}</span>;
+                    })()}
                   </td>
                   <td>{u.phone || 'Chưa cập nhật'}</td>
                   <td>{u.gender === 'Male' ? 'Nam' : u.gender === 'Female' ? 'Nữ' : 'Khác'}</td>
                   <td>{u.address || 'Chưa cập nhật'}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                      <button
-                        className="btn btn-outline"
-                        style={{ padding: '5px 7px', fontSize: '0.75rem', background: 'transparent' }}
-                        onClick={() => openEditModal(u)}
-                        title="Sửa thông tin"
-                      >
-                        <Edit size={14} color="var(--accent-primary)" />
-                      </button>
-                      <button
-                        className="btn btn-outline"
-                        style={{ padding: '5px 7px', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
-                        onClick={() => setDeletingUser(u)}
-                        title="Xóa tài khoản"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
+                  {(canUpdate || canDelete) && (
+                    <td style={{ textAlign: 'center' }}>
+                      {(() => {
+                        const matchedRole = roles.find((r) => r.name === u.role);
+                        const isTargetAdmin =
+                          Boolean(matchedRole?.isSystemAdmin) ||
+                          ['admin', 'quản trị viên'].includes((u.role || '').trim().toLowerCase());
+                        return (
+                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                            {canUpdate && (isSystemAdmin || !isTargetAdmin) && (
+                              <button
+                                className="btn btn-outline"
+                                style={{ padding: '5px 7px', fontSize: '0.75rem', background: 'transparent' }}
+                                onClick={() => openEditModal(u)}
+                                title="Sửa thông tin"
+                              >
+                                <Edit size={14} color="var(--accent-primary)" />
+                              </button>
+                            )}
+                            {canDelete && !isTargetAdmin && u._id !== user?.id && (
+                              <button
+                                className="btn btn-outline"
+                                style={{ padding: '5px 7px', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
+                                onClick={() => setDeletingUser(u)}
+                                title="Xóa tài khoản"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -348,9 +415,11 @@ const UserManagement = () => {
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input
                       required
+                      minLength={6}
                       type={showPassword ? 'text' : 'password'}
                       name="user_password_field"
                       autoComplete="new-password"
+                      placeholder="Tối thiểu 6 ký tự..."
                       className="form-input"
                       style={{ paddingRight: '2.5rem', width: '100%' }}
                       value={newUser.password}
@@ -388,9 +457,11 @@ const UserManagement = () => {
               <div>
                 <label className="text-subtitle" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-primary)' }}>Vai Trò (Role)</label>
                 <select className="form-input" value={newUser.role} onChange={e => handleRoleChange(e.target.value)}>
-                  {roles.map(r => (
-                    <option key={r.name} value={r.name}>{r.name}</option>
-                  ))}
+                  {roles
+                    .filter((r) => isSystemAdmin || (!r.isSystemAdmin && !['admin', 'quản trị viên'].includes((r.name || '').trim().toLowerCase())))
+                    .map(r => (
+                      <option key={r.name} value={r.name}>{r.name}</option>
+                    ))}
                 </select>
               </div>
 
@@ -422,7 +493,7 @@ const UserManagement = () => {
               </div>
 
               {/* Custom user permissions section */}
-              {isEditMode && newUser.role !== 'Admin' && (
+              {isEditMode && !roles.some((r) => r.name === newUser.role && r.isSystemAdmin) && !['admin', 'quản trị viên'].includes((newUser.role || '').trim().toLowerCase()) && canManageRoles && (
                 <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.75rem', paddingTop: '1.25rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                     <label className="text-title" style={{ fontSize: '1rem', marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
